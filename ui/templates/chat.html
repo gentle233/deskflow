@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DeskFlow</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div id="app">
+        <!-- 顶部栏 -->
+        <div id="header">
+            <span id="title">DeskFlow</span>
+            <span id="status-dot" class="dot-green"></span>
+            <span id="status-text">已连接</span>
+            <a href="/settings" id="settings-btn" title="设置">⚙️</a>
+        </div>
+
+        <!-- 聊天记录 -->
+        <div id="chat-box">
+            <div class="message assistant">
+                <div class="avatar">D</div>
+                <div class="bubble">
+                    你好！我是 DeskFlow，你的桌面助手。<br>
+                    可以直接打字说需求，或拖拽文件到窗口里。
+                </div>
+            </div>
+        </div>
+
+        <!-- 输入区 -->
+        <div id="input-area">
+            <div id="file-hint" style="display:none">已选中文件，按回车发送后自动读取</div>
+            <textarea id="input-box" rows="2" placeholder="说点什么..." autofocus></textarea>
+            <button id="send-btn">发送</button>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

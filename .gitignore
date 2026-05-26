@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+dist/
+build/
+*.spec
+*.log
+*.db
+~/.deskflow/
+.DS_Store

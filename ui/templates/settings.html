@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>DeskFlow - 配置</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, "Microsoft YaHei", sans-serif;
+            background: #f5f5f5; height: 100vh; overflow: hidden;
+        }
+        #app {
+            max-width: 800px; margin: 0 auto; background: #fff;
+            height: 100vh; box-shadow: 0 0 20px rgba(0,0,0,0.05);
+        }
+        #header {
+            display: flex; align-items: center; padding: 12px 20px;
+            border-bottom: 1px solid #eee; gap: 12px;
+        }
+        #header h2 { font-size: 16px; font-weight: 600; color: #333; flex: 1; }
+        .back-btn {
+            text-decoration: none; color: #4a7cff; font-size: 14px;
+            padding: 4px 12px; border: 1px solid #4a7cff; border-radius: 6px;
+        }
+        .content { padding: 24px 20px; }
+        .section { margin-bottom: 24px; }
+        .section h3 { font-size: 14px; color: #999; margin-bottom: 12px; }
+        .card {
+            background: #fafafa; border-radius: 8px; padding: 16px;
+            border: 1px solid #eee;
+        }
+        .row {
+            display: flex; justify-content: space-between;
+            padding: 8px 0; border-bottom: 1px solid #f0f0f0;
+            font-size: 14px;
+        }
+        .row:last-child { border-bottom: none; }
+        .row .label { color: #666; }
+        .row .value { color: #333; font-weight: 500; }
+        .status-badge {
+            display: inline-block; padding: 2px 10px; border-radius: 10px;
+            font-size: 12px; font-weight: 500;
+        }
+        .status-ok { background: #f6ffed; color: #52c41a; border: 1px solid #b7eb8f; }
+        .status-err { background: #fff2f0; color: #ff4d4f; border: 1px solid #ffccc7; }
+        .status-wait { background: #fffbe6; color: #faad14; border: 1px solid #ffe58f; }
+        .reconfig-btn {
+            display: block; width: 100%; padding: 12px;
+            background: #4a7cff; color: #fff; border: none;
+            border-radius: 8px; font-size: 14px; cursor: pointer;
+            margin-top: 16px; text-align: center;
+        }
+        .reconfig-btn:hover { background: #3a66d9; }
+        #check-result { margin-top: 12px; font-size: 13px; }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div id="header">
+            <a href="/" class="back-btn">← 回到聊天</a>
+            <h2>设置与配置</h2>
+        </div>
+        <div class="content">
+            <div class="section">
+                <h3>AI 提供商</h3>
+                <div class="card" id="config-card">
+                    <div class="row"><span class="label">提供商</span><span class="value" id="provider">-</span></div>
+                    <div class="row"><span class="label">模型</span><span class="value" id="model">-</span></div>
+                    <div class="row"><span class="label">API Key</span><span class="value" id="api-key">-</span></div>
+                </div>
+                <button class="reconfig-btn" onclick="location.href='/'">重新配置</button>
+            </div>
+
+            <div class="section">
+                <h3>连接检查</h3>
+                <div class="card">
+                    <div class="row">
+                        <span class="label">API 状态</span>
+                        <span id="status-badge" class="status-badge status-wait">检查中...</span>
+                    </div>
+                    <div id="check-result"></div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h3>功能状态</h3>
+                <div class="card" id="features-card">
+                    <div class="row"><span class="label">聊天对话</span><span class="value">✔ 已实现</span></div>
+                    <div class="row"><span class="label">文件查找</span><span class="value">✔ 已实现</span></div>
+                    <div class="row"><span class="label">文档读取/生成</span><span class="value">✔ 已实现</span></div>
+                    <div class="row"><span class="label">Excel 分析</span><span class="value">✔ 已实现</span></div>
+                    <div class="row"><span class="label">联网搜索</span><span class="value">⚠ 服务器可能受限</span></div>
+                    <div class="row"><span class="label">用户习惯学习</span><span class="value">❌ 尚未实现</span></div>
+                    <div class="row"><span class="label">邮件处理</span><span class="value">❌ 未实现</span></div>
+                    <div class="row"><span class="label">自动化任务</span><span class="value">❌ 未实现</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        async function loadConfig() {
+            const r = await fetch('/api/config');
+            const config = await r.json();
+            document.getElementById('provider').textContent = config.provider || '-';
+            document.getElementById('model').textContent = config.model || '自动';
+            document.getElementById('api-key').textContent = config.api_key || '未设置';
+        }
+        async function checkConnection() {
+            const badge = document.getElementById('status-badge');
+            const result = document.getElementById('check-result');
+            try {
+                const r = await fetch('/api/provider/check');
+                const data = await r.json();
+                if (data.status === 'ok') {
+                    badge.className = 'status-badge status-ok';
+                    badge.textContent = '✔ 正常';
+                } else {
+                    badge.className = 'status-badge status-err';
+                    badge.textContent = '✘ 失败';
+                    result.textContent = data.message;
+                }
+            } catch(e) {
+                badge.className = 'status-badge status-err';
+                badge.textContent = '✘ 连接失败';
+            }
+        }
+        loadConfig();
+        checkConnection();
+    </script>
+</body>
+</html>

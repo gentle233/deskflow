@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>DeskFlow - 首次设置</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, "Microsoft YaHei", sans-serif;
+            background: #f5f5f5; display: flex; justify-content: center;
+            align-items: center; height: 100vh;
+        }
+        .card {
+            background: #fff; border-radius: 16px; padding: 40px;
+            width: 480px; box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+        }
+        h1 { font-size: 24px; color: #333; margin-bottom: 8px; }
+        p.sub { color: #999; font-size: 14px; margin-bottom: 28px; }
+        label { display: block; font-size: 14px; color: #555; margin-bottom: 6px; margin-top: 16px; }
+        select, input {
+            width: 100%; padding: 10px 14px; border: 1px solid #d9d9d9;
+            border-radius: 8px; font-size: 14px; outline: none;
+        }
+        select:focus, input:focus { border-color: #4a7cff; }
+        .hint { font-size: 12px; color: #999; margin-top: 4px; }
+        button {
+            width: 100%; margin-top: 28px; padding: 12px;
+            background: #4a7cff; color: #fff; border: none;
+            border-radius: 8px; font-size: 16px; cursor: pointer;
+        }
+        button:hover { background: #3a66d9; }
+        .steps { display: flex; gap: 8px; margin-bottom: 24px; }
+        .step { flex: 1; height: 4px; border-radius: 2px; background: #e8e8e8; }
+        .step.active { background: #4a7cff; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="steps"><div class="step active"></div><div class="step"></div></div>
+        <h1>欢迎使用 DeskFlow</h1>
+        <p class="sub">先配置 AI 提供商，一次性设置后即可开始使用</p>
+
+        <label>选择 AI 提供商</label>
+        <select id="provider">
+            <option value="deepseek">DeepSeek ★推荐（便宜好用）</option>
+            <option value="moonshot">Kimi / 月之暗面</option>
+            <option value="tongyi">统一千问（阿里云）</option>
+            <option value="zhipu">智谱 GLM</option>
+            <option value="openai">OpenAI / ChatGPT</option>
+        </select>
+
+        <label>API Key</label>
+        <input id="api-key" type="password" placeholder="输入你的 API Key">
+        <p class="hint">还没有 Key？去官网注册一个，通常有免费额度</p>
+
+        <button onclick="save()">完成设置</button>
+    </div>
+    <script>
+        async function save() {
+            const provider = document.getElementById('provider').value;
+            const apiKey = document.getElementById('api-key').value.trim();
+            if (!apiKey) { alert('请输入 API Key'); return; }
+            const resp = await fetch('/api/setup', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({provider, api_key: apiKey})
+            });
+            if (resp.ok) { window.location.href = '/'; }
+            else { alert('设置失败，请重试'); }
+        }
+    </script>
+</body>
+</html>

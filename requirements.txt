@@ -1,0 +1,9 @@
+flask>=3.0
+PyWebView>=4.0
+pandas>=2.0
+openpyxl>=3.1
+python-docx>=0.8
+pypdf>=4.0
+requests>=2.31
+ddgs>=0.5
+watchdog>=4.0
