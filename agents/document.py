@@ -26,7 +26,9 @@ class DocumentAgent(BaseAgent):
         return Result(task.id, True, summary=f"已读取文档: {os.path.basename(path)}", data=content)
 
     def _write(self, task: Task) -> Result:
-        path = task.params.get("path", "")
+        path = task.params.get("path", "") or os.path.expanduser("~/Desktop/output.txt")
         content = task.params.get("content", "")
+        if not content:
+            return Result(task.id, True, summary="已理解文档生成需求，请等待 LLM 生成内容后保存")
         FileOps.write(path, content)
         return Result(task.id, True, summary=f"文件已保存: {path}", data=path)
