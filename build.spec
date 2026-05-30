@@ -65,10 +65,9 @@ for _pkg in ['flask', 'jinja2', 'werkzeug', 'markupsafe',
              'requests', 'pypdf', 'python_docx']:
     try:
         _d, _b, _hi = collect_all(_pkg)
-        a.datas += _d
-        a.binaries += _b
+        # 只合并 hidden imports，datas/binaries 的格式与 TOC 不兼容
         a.hiddenimports += [m for m in _hi if m not in a.hiddenimports]
-        log(f"[OK] {_pkg}: +{len(_hi)} mods, +{len(_d)} datas")
+        log(f"[OK] {_pkg}: +{len(_hi)} hidden mods")
     except Exception as ex:
         log(f"[WARN] {_pkg}: {ex}")
 
