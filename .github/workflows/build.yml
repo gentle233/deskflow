@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: '版本号'
+        description: '版本号 (可选)'
         required: false
         default: 'dev'
 
@@ -29,8 +29,58 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
-      - name: Build EXE with PyInstaller (One-Dir)
-        run: pyinstaller build.spec
+      - name: Build EXE (One-Dir)
+        run: |
+          pyinstaller `
+            --onedir `
+            --collect-all flask `
+            --collect-all jinja2 `
+            --collect-all werkzeug `
+            --collect-all markupsafe `
+            --collect-all pandas `
+            --collect-all openpyxl `
+            --collect-all apscheduler `
+            --collect-all watchdog `
+            --collect-all pywinauto `
+            --hidden-import core.config `
+            --hidden-import core.llm_gateway `
+            --hidden-import core.file_ops `
+            --hidden-import core.shortcuts `
+            --hidden-import core.logger `
+            --hidden-import core.file_monitor `
+            --hidden-import core.task_scheduler `
+            --hidden-import core.provider_tester `
+            --hidden-import agents.base_agent `
+            --hidden-import agents.file_manager `
+            --hidden-import agents.document `
+            --hidden-import agents.excel `
+            --hidden-import agents.web_search `
+            --hidden-import agents.memory `
+            --hidden-import agents.window_ops `
+            --hidden-import orchestrator.engine `
+            --hidden-import orchestrator.intent_router `
+            --hidden-import orchestrator.workflows `
+            --hidden-import orchestrator.scheduler `
+            --hidden-import autolearn.models `
+            --hidden-import autolearn.collector `
+            --hidden-import autolearn.analyzer `
+            --hidden-import autolearn.hooks `
+            --hidden-import memory.store `
+            --hidden-import memory.profile `
+            --hidden-import memory.learner `
+            --hidden-import apscheduler.triggers.cron `
+            --hidden-import apscheduler.triggers.interval `
+            --hidden-import apscheduler.schedulers.background `
+            --hidden-import pyperclip `
+            --hidden-import win32gui `
+            --hidden-import webview `
+            --add-data "ui/templates;ui/templates" `
+            --add-data "ui/static;ui/static" `
+            --add-data "ui/icons;ui/icons" `
+            --icon ui/icons/deskflow.ico `
+            --name DeskFlow `
+            --noconsole `
+            run.py
 
       - name: Verify EXE
         run: |
@@ -39,50 +89,54 @@ jobs:
             $total = ($folder | Measure-Object Length -Sum).Sum / 1MB
             $files = ($folder | Measure-Object).Count
             Write-Host "✅ 构建成功 — $files 个文件, 合计 $([math]::Round($total, 1)) MB"
-            Write-Host "   exe: $( (Get-Item 'dist/DeskFlow/DeskFlow.exe').Length / 1KB ) KB"
           } else {
             Write-Error "❌ dist/DeskFlow/DeskFlow.exe 不存在"
             exit 1
           }
 
-      # ── Compile Installer via Inno Setup ──
-      - name: Build Installer (Inno Setup)
+      - name: Check Flask in bundle
         run: |
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
-        shell: powershell
-
-      - name: Verify Installer
-        run: |
-          if (Test-Path "installer/DeskFlow-Setup-*.exe") {
-            $setup = Get-ChildItem "installer/DeskFlow-Setup-*.exe"
-            $size = $setup.Length / 1MB
-            Write-Host "✅ 安装包构建成功 — $([math]::Round($size, 1)) MB"
-            Write-Host "   $($setup.Name)"
+          $flaskDir = "dist/DeskFlow/flask"
+          if (Test-Path $flaskDir) {
+            Write-Host "✅ flask 已打包"
           } else {
-            Write-Error "❌ 安装包不存在"
+            Write-Error "❌ flask 未打包！查找 fla*..."
+            Get-ChildItem "dist/DeskFlow" -Filter "fla*" | ForEach-Object { Write-Host "  找到: $_" }
+            if (-not (Get-ChildItem "dist/DeskFlow" -Filter "fla*")) {
+              Write-Host "  搜索全部 .pth / .py 文件..."
+              Get-ChildItem "dist/DeskFlow" -Filter "*.pth" | ForEach-Object { Write-Host "  .pth: $_" }
+            }
             exit 1
           }
 
-      # ── Upload Artifacts ──
-      - name: Upload Portable (zip)
+      - name: Build Installer (Inno Setup)
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (Test-Path $iscc) {
+            & $iscc installer.iss
+            Write-Host "✅ 安装包构建成功"
+          } else {
+            Write-Host "⚠ Inno Setup 未安装，跳过安装包"
+          }
+
+      - name: Upload Portable
         uses: actions/upload-artifact@v4
         with:
           name: DeskFlow-${{ github.event.inputs.version || github.ref_name }}-Portable
           path: dist/DeskFlow/
 
-      - name: Upload Installer (exe)
+      - name: Upload Installer
         uses: actions/upload-artifact@v4
         with:
           name: DeskFlow-${{ github.event.inputs.version || github.ref_name }}-Setup
-          path: installer/DeskFlow-Setup-*.exe
+          path: installer/*.exe
 
-      # ── Release (tag push only) ──
-      - name: Create Release
+      - name: Create Release (tag push)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            installer/DeskFlow-Setup-*.exe
             dist/DeskFlow/**
+            installer/*.exe
           generate_release_notes: true
           fail_on_unmatched_files: false

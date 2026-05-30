@@ -34,7 +34,56 @@ if %errorlevel% neq 0 (
 
 :: Build
 echo [3/3] Building DeskFlow.exe...
-pyinstaller build.spec
+pyinstaller --onedir ^
+    --collect-all flask ^
+    --collect-all jinja2 ^
+    --collect-all werkzeug ^
+    --collect-all markupsafe ^
+    --collect-all pandas ^
+    --collect-all openpyxl ^
+    --collect-all apscheduler ^
+    --collect-all watchdog ^
+    --collect-all pywinauto ^
+    --hidden-import core.config ^
+    --hidden-import core.llm_gateway ^
+    --hidden-import core.file_ops ^
+    --hidden-import core.shortcuts ^
+    --hidden-import core.logger ^
+    --hidden-import core.file_monitor ^
+    --hidden-import core.task_scheduler ^
+    --hidden-import core.provider_tester ^
+    --hidden-import agents.base_agent ^
+    --hidden-import agents.file_manager ^
+    --hidden-import agents.document ^
+    --hidden-import agents.excel ^
+    --hidden-import agents.web_search ^
+    --hidden-import agents.memory ^
+    --hidden-import agents.window_ops ^
+    --hidden-import orchestrator.engine ^
+    --hidden-import orchestrator.intent_router ^
+    --hidden-import orchestrator.workflows ^
+    --hidden-import orchestrator.scheduler ^
+    --hidden-import autolearn.models ^
+    --hidden-import autolearn.collector ^
+    --hidden-import autolearn.analyzer ^
+    --hidden-import autolearn.hooks ^
+    --hidden-import memory.store ^
+    --hidden-import memory.profile ^
+    --hidden-import memory.learner ^
+    --hidden-import apscheduler.triggers.cron ^
+    --hidden-import apscheduler.triggers.interval ^
+    --hidden-import apscheduler.schedulers.background ^
+    --hidden-import pyperclip ^
+    --hidden-import win32gui ^
+    --hidden-import webview ^
+    --add-data "ui/templates;ui/templates" ^
+    --add-data "ui/static;ui/static" ^
+    --add-data "ui/icons;ui/icons" ^
+    --icon ui/icons/deskflow.ico ^
+    --name DeskFlow ^
+    --noconsole ^
+    run.py
+
 if %errorlevel% neq 0 (
     echo [ERROR] Build failed!
     pause
