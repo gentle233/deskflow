@@ -162,6 +162,34 @@ document.addEventListener('DOMContentLoaded', () => {
     function hideFileHint() { const el = document.getElementById('file-hint'); if (el) el.style.display = 'none'; }
     function escapeHtml(str) { return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
+    // 导出聊天记录
+    document.getElementById('export-btn')?.addEventListener('click', () => {
+        const history = JSON.parse(localStorage.getItem('deskflow_history') || '[]');
+        if (history.length === 0) { alert('暂无聊天记录可导出'); return; }
+        const fmt = confirm('点击"确定"导出 JSON 格式，点击"取消"导出 Markdown 格式');
+        if (fmt) {
+            const blob = new Blob([JSON.stringify(history, null, 2)], {type: 'application/json'});
+            downloadBlob(blob, 'deskflow-history-' + Date.now() + '.json');
+        } else {
+            let md = '# DeskFlow 聊天记录\n\n导出时间: ' + new Date().toLocaleString() + '\n\n---\n\n';
+            for (const msg of history) {
+                const role = msg.role === 'user' ? '**你**' : '**DeskFlow**';
+                const time = msg.time ? new Date(msg.time).toLocaleString() : '未知时间';
+                md += '### ' + role + ' (' + time + ')\n\n' + msg.content + '\n\n---\n\n';
+            }
+            const blob = new Blob([md], {type: 'text/markdown'});
+            downloadBlob(blob, 'deskflow-history-' + Date.now() + '.md');
+        }
+    });
+    function downloadBlob(blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = filename;
+        document.body.appendChild(a); a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+
     // History
     const STORAGE_KEY = 'deskflow_history';
     function saveToHistory(userMsg, assistantMsg) {
