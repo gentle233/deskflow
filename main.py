@@ -11,6 +11,7 @@ from core.llm_gateway import LLMGateway
 from core.config import load_config, save_config, update_config
 from core.file_ops import FileOps
 from core.shortcuts import load_shortcuts, add_shortcut, delete_shortcut
+from core.logger import logger, get_log_lines, clear_logs as clear_log_files
 from autolearn.models import init_db as init_autolearn_db, get_active_patterns, dismiss_pattern, count_events_last_24h, get_db_size_mb
 from autolearn.collector import start_collectors
 from autolearn.analyzer import run_analysis, purge_old_data
@@ -218,6 +219,21 @@ def _autolearn_title(pattern: dict) -> str:
         return f'💡 {val[:30]}'
     return f'🔔 {val[:30]}'
 
+@app.route("/api/logs")
+def api_logs():
+    """查看日志"""
+    count = request.args.get("lines", 200, type=int)
+    level = request.args.get("level", "", type=str)
+    search = request.args.get("search", "", type=str)
+    count = min(count, 1000)
+    return jsonify(get_log_lines(count=count, level=level.upper(), search=search))
+
+@app.route("/api/logs/clear", methods=["POST"])
+def api_logs_clear():
+    """清空日志"""
+    result = clear_log_files()
+    return jsonify(result)
+
 @app.route("/settings")
 def settings():
     """配置页面"""
@@ -240,6 +256,7 @@ def main():
     init_db()
     init_autolearn_db()
     config = load_config()
+    logger.info("DeskFlow 启动 — 工作目录: %s", BASE_DIR)
     if not config.get("first_run"):
         _init_orchestrator()
         # 启动自动学习采集器
@@ -262,11 +279,11 @@ def _start_autolearn_scheduler():
         # 每天凌晨清理一次过期数据
         scheduler.add_job(purge_old_data, 'cron', hour=3, id='autolearn_purge')
         scheduler.start()
-        print("[autolearn] 定时任务已启动（每小时分析 / 每天3点清理）")
+        logger.info("自动学习定时任务已启动（每小时分析 / 每天3点清理）")
     except ImportError:
-        print("[autolearn] apscheduler 未安装，跳过定时分析")
+        logger.warning("apscheduler 未安装，跳过定时分析")
     except Exception as e:
-        print(f"[autolearn] 调度器启动失败: {e}")
+        logger.error("自动学习调度器启动失败: %s", e)
 
 if __name__ == "__main__":
     main()

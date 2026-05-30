@@ -52,6 +52,53 @@
         }
         .reconfig-btn:hover { background: #3a66d9; }
         #check-result { margin-top: 12px; font-size: 13px; }
+        /* 日志查看器 */
+        .log-viewer {
+            background: #1e1e2e; color: #cdd6f4; font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+            font-size: 12px; line-height: 1.6; padding: 12px; border-radius: 8px;
+            max-height: 400px; overflow-y: auto; white-space: pre; margin: 0;
+            border: 1px solid #313244; tab-size: 2;
+        }
+        .log-viewer::-webkit-scrollbar { width: 6px; }
+        .log-viewer::-webkit-scrollbar-track { background: #181825; }
+        .log-viewer::-webkit-scrollbar-thumb { background: #45475a; border-radius: 3px; }
+        .log-toolbar {
+            display: flex; justify-content: space-between; align-items: center;
+            flex-wrap: wrap; gap: 8px; margin-bottom: 8px;
+        }
+        .log-tabs { display: flex; gap: 4px; }
+        .log-tab {
+            padding: 4px 12px; border: 1px solid #ddd; border-radius: 6px;
+            background: #f5f5f5; cursor: pointer; font-size: 12px; color: #666;
+            transition: all 0.15s;
+        }
+        .log-tab:hover { background: #e8f0ff; border-color: #4a7cff; }
+        .log-tab.active {
+            background: #4a7cff; color: #fff; border-color: #4a7cff;
+        }
+        .log-actions {
+            display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+        }
+        .log-actions input[type="text"] {
+            padding: 4px 8px; border: 1px solid #ddd; border-radius: 6px;
+            font-size: 12px; width: 120px;
+        }
+        .log-actions select {
+            padding: 4px 6px; border: 1px solid #ddd; border-radius: 6px;
+            font-size: 12px; background: #fff;
+        }
+        .log-actions button {
+            padding: 4px 8px; border: 1px solid #ddd; border-radius: 6px;
+            background: #fff; cursor: pointer; font-size: 13px;
+        }
+        .log-actions button:hover { background: #f0f0f0; }
+        .log-status {
+            font-size: 11px; color: #999; padding: 4px 0; text-align: right;
+        }
+        .log-line-error { color: #f38ba8; }
+        .log-line-warning { color: #fab387; }
+        .log-line-info { color: #89b4fa; }
+        .log-line-other { color: #6c7086; }
     </style>
 </head>
 <body>
@@ -136,6 +183,37 @@
                         <span class="label">自动学习</span>
                         <span class="value" id="autolearn-stats">加载中...</span>
                     </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h3>错误日志</h3>
+                <div class="card" id="log-card">
+                    <div class="log-toolbar">
+                        <div class="log-tabs">
+                            <button class="log-tab active" data-level="" onclick="switchLogLevel(this, '')">全部</button>
+                            <button class="log-tab" data-level="INFO" onclick="switchLogLevel(this, 'INFO')">INFO</button>
+                            <button class="log-tab" data-level="WARNING" onclick="switchLogLevel(this, 'WARNING')">WARN</button>
+                            <button class="log-tab" data-level="ERROR" onclick="switchLogLevel(this, 'ERROR')">ERROR</button>
+                        </div>
+                        <div class="log-actions">
+                            <input id="log-search" type="text" placeholder="搜索..." oninput="loadLogsDelayed()">
+                            <select id="log-lines" onchange="loadLogs()">
+                                <option value="100">100行</option>
+                                <option value="200" selected>200行</option>
+                                <option value="500">500行</option>
+                                <option value="1000">1000行</option>
+                            </select>
+                            <button onclick="loadLogs()" title="刷新">🔄</button>
+                            <button onclick="scrollLogBottom()" title="到底">⬇</button>
+                            <button onclick="confirmClearLogs()" title="清空" style="color:#ff4d4f">🗑</button>
+                            <label style="font-size:12px;color:#888;display:flex;align-items:center;gap:4px">
+                                <input type="checkbox" id="log-auto" checked onchange="toggleAutoRefresh()"> 自动
+                            </label>
+                        </div>
+                    </div>
+                    <pre id="log-viewer" class="log-viewer">加载中...</pre>
+                    <div id="log-status" class="log-status"></div>
                 </div>
             </div>
         </div>
@@ -245,6 +323,83 @@ async function saveSearchConfig() {
 
 loadSearchConfig();
 loadShortcuts();
+
+// 日志查看器
+let logLevel = '';
+let logTimer = null;
+let logAutoRefresh = true;
+
+async function loadLogs() {
+    const viewer = document.getElementById('log-viewer');
+    const status = document.getElementById('log-status');
+    if (!viewer) return;
+    const lines = document.getElementById('log-lines')?.value || 200;
+    const search = document.getElementById('log-search')?.value || '';
+    const url = `/api/logs?lines=${lines}&level=${logLevel}&search=${encodeURIComponent(search)}`;
+    try {
+        viewer.textContent = '加载中...';
+        const r = await fetch(url);
+        const data = await r.json();
+        if (data.lines.length === 0) {
+            viewer.innerHTML = '<span style="color:#6c7086">暂无日志</span>';
+        } else {
+            // 按级别着色
+            viewer.innerHTML = data.lines.map(line => {
+                if (line.includes('[ERROR]')) return `<span class="log-line-error">${escHtml(line)}</span>`;
+                if (line.includes('[WARNING]')) return `<span class="log-line-warning">${escHtml(line)}</span>`;
+                if (line.includes('[INFO]')) return `<span class="log-line-info">${escHtml(line)}</span>`;
+                return `<span class="log-line-other">${escHtml(line)}</span>`;
+            }).join('\n');
+        }
+        status.textContent = `共 ${data.total_lines} 行 · 显示 ${data.filtered_lines} 行 · ${data.file_size_mb} MB`;
+        viewer.scrollTop = viewer.scrollHeight;
+    } catch(e) {
+        viewer.textContent = '❌ 加载失败: ' + e.message;
+    }
+}
+
+function loadLogsDelayed() {
+    clearTimeout(logTimer);
+    logTimer = setTimeout(loadLogs, 300);
+}
+
+function switchLogLevel(btn, level) {
+    document.querySelectorAll('.log-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    logLevel = level;
+    loadLogs();
+}
+
+function scrollLogBottom() {
+    const viewer = document.getElementById('log-viewer');
+    if (viewer) viewer.scrollTop = viewer.scrollHeight;
+}
+
+function toggleAutoRefresh() {
+    logAutoRefresh = document.getElementById('log-auto')?.checked || false;
+    if (logAutoRefresh) loadLogs();
+}
+
+function confirmClearLogs() {
+    if (!confirm('确定要清空所有日志吗？')) return;
+    if (!confirm('⚠️ 此操作不可撤销，确认清空？')) return;
+    fetch('/api/logs/clear', {method:'POST'}).then(r => r.json()).then(d => {
+        if (d.status === 'ok') {
+            loadLogs();
+        } else {
+            alert('清空失败: ' + (d.error || ''));
+        }
+    });
+}
+
+// 自动刷新：每 15 秒
+setInterval(() => {
+    if (logAutoRefresh) loadLogs();
+}, 15000);
+
+// 加载日志
+loadLogs();
+
 // 恢复提示音开关状态
 const soundToggle = document.getElementById('sound-toggle');
 if (soundToggle) soundToggle.checked = localStorage.getItem('deskflow_sound') !== 'off';
