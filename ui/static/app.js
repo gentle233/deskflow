@@ -5,6 +5,7 @@ let selectedFile = null;
 let abortController = null;
 let isStreaming = false;
 let lastUserText = '';
+let shortcutsCache = [];
 
 if (typeof marked !== 'undefined') {
     marked.setOptions({ breaks: true, gfm: true });
@@ -42,16 +43,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function send() {
         const text = input.value.trim();
-        if (!text && !selectedFile) return;
-        lastUserText = text || (selectedFile ? '\u53d1\u9001\u4e86\u6587\u4ef6: ' + selectedFile.name : '');
+        // 快捷指令检测
+        let resolvedText = text;
+        if (text.startsWith('/') && shortcutsCache.length > 0) {
+            const match = shortcutsCache.find(s => s.trigger === text);
+            if (match) resolvedText = match.command;
+        }
+        const finalText = resolvedText;
+        if (!finalText && !selectedFile) return;
+        lastUserText = text || (selectedFile ? '已发送了文件: ' + selectedFile.name : '');
         addMessage(lastUserText, 'user');
         input.value = '';
+        // 隐藏提示浮层
+        hideSuggestions();
         showTyping();
         sendBtn.disabled = true;
         stopBtn.style.display = 'inline-block';
 
         const formData = new FormData();
-        formData.append('message', text);
+        formData.append('message', finalText);
         if (selectedFile) { formData.append('file', selectedFile); selectedFile = null; }
 
         abortController = new AbortController();
@@ -173,4 +183,36 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         chatBox.scrollTop = chatBox.scrollHeight;
     }
+
+    // 快捷指令 — 加载缓存
+    async function loadShortcutsCache() {
+        try {
+            const r = await fetch('/api/shortcuts');
+            shortcutsCache = await r.json();
+        } catch(e) { shortcutsCache = []; }
+    }
+    loadShortcutsCache();
+
+    // 快捷指令 — 输入提示
+    const scSuggest = document.getElementById('sc-suggest');
+    input.addEventListener('input', () => {
+        const val = input.value.trim();
+        if (val.startsWith('/') && shortcutsCache.length > 0) {
+            const matched = shortcutsCache.filter(s => s.trigger.startsWith(val));
+            if (matched.length > 0) {
+                scSuggest.innerHTML = matched.map(s =>
+                    `<div style="padding:8px 12px;cursor:pointer;border-bottom:1px solid #f0f0f0;font-size:13px" onmouseover="this.style.background='#f5f5f5'" onmouseout="this.style.background=''" onclick="document.getElementById('input-box').value='${escHtml(s.trigger)}';document.getElementById('sc-suggest').style.display='none';document.getElementById('input-box').focus()">
+                        <code style="background:#e8f0ff;padding:1px 5px;border-radius:3px">${escHtml(s.trigger)}</code>
+                        <span style="color:#888;margin-left:8px">${escHtml(s.desc || s.command.slice(0, 20))}</span>
+                    </div>`
+                ).join('');
+                scSuggest.style.display = 'block';
+                return;
+            }
+        }
+        scSuggest.style.display = 'none';
+    });
+    function hideSuggestions() { if (scSuggest) scSuggest.style.display = 'none'; }
+    // Click outside to close
+    document.addEventListener('click', (e) => { if (scSuggest && !e.target.closest('#input-area')) scSuggest.style.display = 'none'; });
 });

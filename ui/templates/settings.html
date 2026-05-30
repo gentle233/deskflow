@@ -94,6 +94,19 @@
             </div>
 
             <div class="section">
+                <h3>快捷指令</h3>
+                <div class="card">
+                    <div id="shortcut-list"></div>
+                    <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+                        <input id="sc-trigger" placeholder="/前缀" style="flex:1;min-width:80px;padding:8px;border:1px solid #ddd;border-radius:6px">
+                        <input id="sc-command" placeholder="触发后发送的内容" style="flex:2;min-width:150px;padding:8px;border:1px solid #ddd;border-radius:6px">
+                        <button onclick="addShortcut()" style="padding:8px 16px;background:#4a7cff;color:#fff;border:none;border-radius:6px;cursor:pointer">添加</button>
+                    </div>
+                    <div id="sc-msg" style="font-size:12px;color:#999;padding:4px 0"></div>
+                </div>
+            </div>
+
+            <div class="section">
                 <h3>连接检查</h3>
                 <div class="card">
                     <div class="row">
@@ -151,32 +164,69 @@
     </script>
 
 <script>
+async function loadShortcuts() {
+    const r = await fetch('/api/shortcuts');
+    const list = await r.json();
+    const el = document.getElementById('shortcut-list');
+    if (!el) return;
+    el.innerHTML = list.map(s => `
+        <div class="row">
+            <span><code style="background:#f0f0f0;padding:2px 6px;border-radius:4px">${escHtml(s.trigger)}</code>
+            <span style="color:#666;margin-left:8px">${escHtml(s.desc || s.command.slice(0, 20))}</span></span>
+            <button onclick="deleteShortcut('${escHtml(s.trigger)}')" style="border:none;background:none;color:#ff4d4f;cursor:pointer;font-size:13px">✕</button>
+        </div>
+    `).join('');
+}
+async function addShortcut() {
+    const t = document.getElementById('sc-trigger').value.trim();
+    const c = document.getElementById('sc-command').value.trim();
+    const msg = document.getElementById('sc-msg');
+    if (!t || !c) { msg.textContent = '请填写触发词和内容'; return; }
+    const r = await fetch('/api/shortcuts', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({trigger:t, command:c})});
+    const data = await r.json();
+    if (data.status === 'ok') {
+        msg.textContent = '✅ 已添加';
+        document.getElementById('sc-trigger').value = '';
+        document.getElementById('sc-command').value = '';
+        loadShortcuts();
+    } else {
+        msg.textContent = '❌ ' + (data.error || '添加失败');
+    }
+}
+async function deleteShortcut(trigger) {
+    await fetch('/api/shortcuts', {method:'DELETE', headers:{'Content-Type':'application/json'}, body:JSON.stringify({trigger:trigger})});
+    loadShortcuts();
+}
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
 async function loadSearchConfig() {
     try {
         const r = await fetch('/api/config');
         const cfg = await r.json();
-        document.getElementById('search-provider').value = cfg.search_provider || 'ddgs';
+        const sel = document.getElementById('search-provider');
+        if (sel) sel.value = cfg.search_provider || 'ddgs';
         if (cfg.bing_api_key) {
-            document.getElementById('bing-key').value = '••••••••' + cfg.bing_api_key.slice(-4);
+            const keyInput = document.getElementById('bing-key');
+            if (keyInput) keyInput.value = '••••••••' + cfg.bing_api_key.slice(-4);
         }
         toggleBingKey();
     } catch(e) {}
 }
-
 function toggleBingKey() {
-    const show = document.getElementById('search-provider').value === 'bing';
-    document.getElementById('bing-key-row').style.display = show ? 'flex' : 'none';
+    const show = document.getElementById('search-provider')?.value === 'bing';
+    const row = document.getElementById('bing-key-row');
+    if (row) row.style.display = show ? 'flex' : 'none';
 }
-
 async function saveSearchConfig() {
-    const provider = document.getElementById('search-provider').value;
-    const key = document.getElementById('bing-key').value;
+    const provider = document.getElementById('search-provider')?.value;
+    const key = document.getElementById('bing-key')?.value;
     const result = document.getElementById('search-result');
+    if (!result) return;
     try {
         const r = await fetch('/api/config/search', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({search_provider: provider, bing_api_key: key.includes('*') ? '' : key})
+            body: JSON.stringify({search_provider: provider, bing_api_key: key?.includes('*') ? '' : key})
         });
         const data = await r.json();
         result.textContent = data.status === 'ok' ? '✅ 已保存' : '❌ ' + (data.error || '保存失败');
@@ -186,6 +236,7 @@ async function saveSearchConfig() {
 }
 
 loadSearchConfig();
+loadShortcuts();
 </script>
 
 </body>
