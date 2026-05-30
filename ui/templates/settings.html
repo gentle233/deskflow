@@ -125,7 +125,14 @@
                 <button class="reconfig-btn" onclick="location.href='/'">重新配置</button>
             </div>
 
-            
+            <div class="section">
+                <h3>多提供商测试</h3>
+                <div class="card">
+                    <div id="provider-list"></div>
+                    <div id="provider-test-result" style="font-size:12px;color:#666;padding-top:8px"></div>
+                </div>
+            </div>
+
             <div class="section">
                 <h3>搜索设置</h3>
                 <div class="card">
@@ -718,6 +725,101 @@ async function deleteTask(id) {
 
 // 加载定时任务
 loadTasks();
+
+// 多提供商测试
+async function loadProviders() {
+    const list = document.getElementById('provider-list');
+    if (!list) return;
+    try {
+        const r = await fetch('/api/providers');
+        const providers = await r.json();
+        list.innerHTML = providers.map(p => {
+            const keyPreview = p.has_key ? `<span style="color:#999">${escHtml(p.key_preview)}</span>` : `<span style="color:#ff4d4f">未配置</span>`;
+            const statusIcon = p.has_key ? '✅' : '⬜';
+            return `<div style="border:1px solid #eee;border-radius:8px;padding:10px 12px;margin-bottom:8px;background:#fafafa">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                    <div>
+                        <span style="font-weight:600;font-size:14px">${statusIcon} ${escHtml(p.name)}</span>
+                        <span style="font-size:11px;color:#999;margin-left:6px">${escHtml(p.model)}</span>
+                    </div>
+                    <span style="font-size:11px;color:#888">${escHtml(p.desc)}</span>
+                </div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+                    <input type="password" id="pk-${p.id}" placeholder="输入 API Key" style="flex:2;min-width:150px;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px" ${p.has_key ? `value="********"` : ''}>
+                    <button onclick="testProvider('${p.id}')" style="padding:5px 12px;background:#4a7cff;color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:12px">测试</button>
+                    <button id="activate-${p.id}" onclick="setProvider('${p.id}')" style="padding:5px 12px;background:#52c41a;color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:12px${p.has_key ? '' : ';opacity:0.5'}">设为当前</button>
+                </div>
+                <div id="result-${p.id}" style="font-size:11px;color:#999;padding-top:4px"></div>
+            </div>`;
+        }).join('');
+    } catch(e) {
+        list.innerHTML = '<div style="color:#ff4d4f;text-align:center">❌ 加载失败</div>';
+    }
+}
+
+async function testProvider(id) {
+    const resultEl = document.getElementById('result-' + id);
+    const keyInput = document.getElementById('pk-' + id);
+    if (!resultEl) return;
+    resultEl.textContent = '⏳ 测试中...';
+    resultEl.style.color = '#999';
+    const apiKey = keyInput && keyInput.value && keyInput.value !== '********' ? keyInput.value : '';
+    try {
+        const r = await fetch('/api/providers/test', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({provider: id, api_key: apiKey})
+        });
+        const data = await r.json();
+        if (data.status === 'ok') {
+            resultEl.innerHTML = `✅ 正常 (${data.latency}s) · 模型: ${escHtml(data.model)} · 回复: "${escHtml(data.reply)}"`;
+            resultEl.style.color = '#52c41a';
+            // 如果输入了新 key，保存它
+            if (apiKey) {
+                keyInput.value = '********';
+            }
+        } else {
+            resultEl.innerHTML = `❌ ${escHtml(data.error)}` + (data.latency ? ` (${data.latency}s)` : '');
+            resultEl.style.color = '#ff4d4f';
+        }
+    } catch(e) {
+        resultEl.innerHTML = '❌ 请求失败: ' + e.message;
+        resultEl.style.color = '#ff4d4f';
+    }
+}
+
+async function setProvider(id) {
+    const keyInput = document.getElementById('pk-' + id);
+    const resultEl = document.getElementById('result-' + id);
+    if (!resultEl) return;
+    const apiKey = keyInput && keyInput.value && keyInput.value !== '********' ? keyInput.value : '';
+    const body = {provider: id};
+    if (apiKey) body.api_key = apiKey;
+    resultEl.textContent = '⏳ 切换中...';
+    try {
+        const r = await fetch('/api/providers/set', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify(body)
+        });
+        const data = await r.json();
+        if (data.status === 'ok') {
+            resultEl.innerHTML = '✅ 已切换到 ' + id;
+            resultEl.style.color = '#52c41a';
+            // 更新顶部的当前提供商显示
+            document.getElementById('provider').textContent = id;
+            if (keyInput && apiKey) keyInput.value = '********';
+            loadProviders();
+        } else {
+            resultEl.innerHTML = '❌ ' + (data.error || '切换失败');
+            resultEl.style.color = '#ff4d4f';
+        }
+    } catch(e) {
+        resultEl.innerHTML = '❌ ' + e.message;
+        resultEl.style.color = '#ff4d4f';
+    }
+}
+
+// 加载提供商列表
+loadProviders();
 // 每 30 秒刷新（更新下次运行时间）
 setInterval(loadTasks, 30000);
 

@@ -17,6 +17,8 @@ from core.task_scheduler import (
     list_tasks, create_task, update_task, delete_task,
     toggle_task, run_task_now, register_callback, init_scheduler
 )
+from core.provider_tester import list_providers, test_provider, test_all_providers
+from core.config import set_provider_key
 from autolearn.models import init_db as init_autolearn_db, get_active_patterns, dismiss_pattern, count_events_last_24h, get_db_size_mb
 from autolearn.collector import start_collectors
 from autolearn.analyzer import run_analysis, purge_old_data
@@ -322,6 +324,59 @@ def api_tasks_toggle(task_id):
 def api_tasks_run(task_id):
     """立即执行定时任务"""
     return jsonify(run_task_now(task_id))
+
+@app.route("/api/providers")
+def api_providers_list():
+    """列出所有提供商及 Key 状态"""
+    return jsonify(list_providers())
+
+@app.route("/api/providers/test", methods=["POST"])
+def api_providers_test():
+    """测试指定提供商"""
+    data = request.json or {}
+    provider = data.get("provider", "")
+    api_key = data.get("api_key", "")
+    if not provider:
+        return jsonify({"status": "error", "error": "请指定提供商"}), 400
+    result = test_provider(provider, api_key)
+    return jsonify(result)
+
+@app.route("/api/providers/test-all", methods=["POST"])
+def api_providers_test_all():
+    """测试所有已配置 Key 的提供商"""
+    results = test_all_providers()
+    return jsonify(results)
+
+@app.route("/api/providers/set", methods=["POST"])
+def api_providers_set():
+    """切换当前使用的提供商"""
+    data = request.json or {}
+    provider = data.get("provider", "")
+    api_key = data.get("api_key", "")
+    model = data.get("model", "")
+
+    # 验证提供商
+    valid = ["deepseek", "openai", "moonshot", "zhipu", "tongyi"]
+    if provider not in valid:
+        return jsonify({"status": "error", "error": f"不支持的提供商: {provider}"}), 400
+
+    # 保存 Key 并切换
+    if api_key:
+        set_provider_key(provider, api_key)
+    # 先更新提供商名称，再同步 Key（set_provider_key 内部会检查 provider 是否匹配）
+    update_config("provider", provider)
+    if not api_key:
+        from core.config import get_provider_key
+        existing = get_provider_key(provider)
+        if existing:
+            set_provider_key(provider, existing)
+    if model:
+        update_config("model", model)
+
+    # 重新初始化 orchestrator
+    _init_orchestrator()
+    logger.info("已切换到提供商: %s", provider)
+    return jsonify({"status": "ok", "provider": provider})
 
 @app.route("/settings")
 def settings():
