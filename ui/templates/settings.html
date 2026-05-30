@@ -71,6 +71,28 @@
                 <button class="reconfig-btn" onclick="location.href='/'">重新配置</button>
             </div>
 
+            
+            <div class="section">
+                <h3>搜索设置</h3>
+                <div class="card">
+                    <div class="row">
+                        <span class="label">搜索提供商</span>
+                        <select id="search-provider" onchange="toggleBingKey()">
+                            <option value="ddgs">DuckDuckGo（无需配置）</option>
+                            <option value="bing">必应搜索 API（需 Key）</option>
+                        </select>
+                    </div>
+                    <div id="bing-key-row" class="row" style="display:none">
+                        <span class="label">必应 API Key</span>
+                        <input type="password" id="bing-key" placeholder="输入必应 API Key" style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--ibg);color:var(--text)">
+                    </div>
+                    <div class="row">
+                        <button class="reconfig-btn" onclick="saveSearchConfig()">保存搜索设置</button>
+                    </div>
+                    <div id="search-result" style="font-size:12px;color:var(--t3);padding:4px 0"></div>
+                </div>
+            </div>
+
             <div class="section">
                 <h3>连接检查</h3>
                 <div class="card">
@@ -127,5 +149,44 @@
         loadConfig();
         checkConnection();
     </script>
+
+<script>
+async function loadSearchConfig() {
+    try {
+        const r = await fetch('/api/config');
+        const cfg = await r.json();
+        document.getElementById('search-provider').value = cfg.search_provider || 'ddgs';
+        if (cfg.bing_api_key) {
+            document.getElementById('bing-key').value = '••••••••' + cfg.bing_api_key.slice(-4);
+        }
+        toggleBingKey();
+    } catch(e) {}
+}
+
+function toggleBingKey() {
+    const show = document.getElementById('search-provider').value === 'bing';
+    document.getElementById('bing-key-row').style.display = show ? 'flex' : 'none';
+}
+
+async function saveSearchConfig() {
+    const provider = document.getElementById('search-provider').value;
+    const key = document.getElementById('bing-key').value;
+    const result = document.getElementById('search-result');
+    try {
+        const r = await fetch('/api/config/search', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({search_provider: provider, bing_api_key: key.includes('*') ? '' : key})
+        });
+        const data = await r.json();
+        result.textContent = data.status === 'ok' ? '✅ 已保存' : '❌ ' + (data.error || '保存失败');
+    } catch(e) {
+        result.textContent = '❌ ' + e.message;
+    }
+}
+
+loadSearchConfig();
+</script>
+
 </body>
 </html>

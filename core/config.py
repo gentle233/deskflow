@@ -12,6 +12,8 @@ DEFAULT_CONFIG = {
     "theme": "light",
     "output_dir": os.path.expanduser("~/Desktop"),
     "first_run": True,
+    "search_provider": "ddgs",
+    "bing_api_key": "",
 }
 
 def load_config() -> dict:

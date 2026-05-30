@@ -36,7 +36,7 @@
 - [ ] Windows 窗口操作 Agent（pywinauto，桌面自动化）
 
 ### 三、地域性
-- [ ] 必应搜索 API（DuckDuckGo 国内不稳定）
+- [x] 必应搜索 API（设置页面可切换，支持 DDGS/必应双引擎）
 - [ ] 多提供商测试（通义/GLM/Kimi）
 - [ ] 流式输出 SSE
 

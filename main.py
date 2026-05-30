@@ -96,6 +96,21 @@ def check_provider():
         return jsonify({"status": "error", "message": str(e)})
 
 # 在聊天页的导航栏加一个配置按钮
+
+@app.route("/api/config/search", methods=["POST"])
+def save_search_config():
+    """保存搜索设置"""
+    data = request.json
+    if not data:
+        return jsonify({"status": "error", "error": "无数据"})
+    provider = data.get("search_provider", "ddgs")
+    if provider not in ("ddgs", "bing"):
+        return jsonify({"status": "error", "error": "不支持的搜索提供商"})
+    update_config("search_provider", provider)
+    if provider == "bing" and data.get("bing_api_key"):
+        update_config("bing_api_key", data["bing_api_key"])
+    return jsonify({"status": "ok"})
+
 @app.route("/settings")
 def settings():
     """配置页面"""
