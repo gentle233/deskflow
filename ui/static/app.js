@@ -100,6 +100,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             bubble.innerHTML = renderMarkdown(fullText);
                             chatBox.scrollTop = chatBox.scrollHeight;
                         } else if (data.done) {
+                            playNotificationSound();
                             saveToHistory(lastUserText, fullText);
                         } else if (data.error) {
                             bubble.innerHTML = '\u274c ' + escapeHtml(data.error);
@@ -111,7 +112,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 try {
                     const data = JSON.parse(buffer.slice(6));
                     if (data.token) { fullText += data.token; bubble.innerHTML = renderMarkdown(fullText); }
-                    else if (data.done) { saveToHistory(lastUserText, fullText); }
+                    else if (data.done) { playNotificationSound(); saveToHistory(lastUserText, fullText); }
                 } catch(e) {}
             }
         } catch (err) {
@@ -161,6 +162,24 @@ document.addEventListener('DOMContentLoaded', () => {
     function showFileHint() { const el = document.getElementById('file-hint'); if (el) el.style.display = 'block'; }
     function hideFileHint() { const el = document.getElementById('file-hint'); if (el) el.style.display = 'none'; }
     function escapeHtml(str) { return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+    // 提示音
+    function playNotificationSound() {
+        if (localStorage.getItem('deskflow_sound') === 'off') return;
+        try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.frequency.value = 660;
+            osc.type = 'sine';
+            gain.gain.setValueAtTime(0.3, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
+            osc.start(ctx.currentTime);
+            osc.stop(ctx.currentTime + 0.15);
+        } catch(e) {}
+    }
 
     // 导出聊天记录
     document.getElementById('export-btn')?.addEventListener('click', () => {

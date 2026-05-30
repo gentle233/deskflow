@@ -128,6 +128,10 @@
                     <div class="row"><span class="label">用户习惯学习</span><span class="value">❌ 尚未实现</span></div>
                     <div class="row"><span class="label">邮件处理</span><span class="value">❌ 未实现</span></div>
                     <div class="row"><span class="label">自动化任务</span><span class="value">❌ 未实现</span></div>
+                    <div class="row">
+                        <span class="label">提示音</span>
+                        <label><input type="checkbox" id="sound-toggle" checked onchange="localStorage.setItem('deskflow_sound', this.checked ? 'on' : 'off')"> 消息提醒音</label>
+                    </div>
                 </div>
             </div>
         </div>
@@ -237,6 +241,9 @@ async function saveSearchConfig() {
 
 loadSearchConfig();
 loadShortcuts();
+// 恢复提示音开关状态
+const soundToggle = document.getElementById('sound-toggle');
+if (soundToggle) soundToggle.checked = localStorage.getItem('deskflow_sound') !== 'off';
 </script>
 
 </body>
