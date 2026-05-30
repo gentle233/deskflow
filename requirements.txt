@@ -7,3 +7,6 @@ pypdf>=4.0
 requests>=2.31
 ddgs>=0.5
 watchdog>=4.0
+apscheduler>=3.10
+pyperclip>=1.8
+pywinauto>=6.8        # Windows only: 桌面窗口操作

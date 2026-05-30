@@ -45,5 +45,11 @@ echo.
 echo ================================
 echo    Build Complete!
 echo    Output: dist\DeskFlow.exe
+echo    Size: 
+for %%I in (dist\DeskFlow.exe) do @echo    %%~zI bytes
 echo ================================
+echo.
+echo 提示: 首次运行会在 %USERPROFILE%\.deskflow\
+echo 创建配置文件，请打开软件后配置 API Key。
+echo.
 pause

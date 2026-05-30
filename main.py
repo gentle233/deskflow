@@ -406,7 +406,8 @@ def _init_orchestrator():
             logger.error("⏰ 任务执行失败 [%s]: %s", task.get("name", "?"), e)
     register_callback(_task_callback)
 
-def main():
+def init_deskflow():
+    """初始化 DeskFlow 所有子系统（供 run.py 桌面版和 main.py 共用）"""
     init_db()
     init_autolearn_db()
     config = load_config()
@@ -429,6 +430,10 @@ def main():
             init_scheduler()
         except Exception as e:
             logger.warning("定时任务调度器启动失败: %s", e)
+
+
+def main():
+    init_deskflow()
     # 启动 Flask
     app.run(host="127.0.0.1", port=7788, debug=False)
 
