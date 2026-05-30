@@ -48,9 +48,20 @@ def _init_logging():
     _log("🚀 DeskFlow 启动...")
 
 
-# ── 保证可导入项目模块 ──
+# 保证可导入项目模块
 BASE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, BASE)
+
+# ── 强制 PyInstaller 打包这些依赖（main.py 在后台线程 import，静态扫描可能漏） ──
+import flask  # noqa: F401
+import jinja2  # noqa: F401
+import werkzeug  # noqa: F401
+import markupsafe  # noqa: F401
+import click  # noqa: F401
+import requests  # noqa: F401
+import pandas  # noqa: F401
+import watchdog  # noqa: F401
+import apscheduler  # noqa: F401
 
 # 全局引用，防止 GC
 _flask_thread = None

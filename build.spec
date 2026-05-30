@@ -77,13 +77,10 @@ from PyInstaller.utils.hooks import collect_all
 for _pkg in ['flask', 'jinja2', 'werkzeug', 'markupsafe',
              'pandas', 'openpyxl', 'apscheduler',
              'watchdog', 'pywinauto']:
-    try:
-        _d, _b, _hi = collect_all(_pkg)
-        a.datas += _d
-        a.binaries += _b
-        a.hiddenimports += list(set(_hi) - set(a.hiddenimports))
-    except Exception:
-        pass
+    _d, _b, _hi = collect_all(_pkg)
+    a.datas += _d
+    a.binaries += _b
+    a.hiddenimports += list(set(_hi) - set(a.hiddenimports))
 
 # ── 打包：One-Dir 模式（exe + 依赖文件放在同一目录） ──
 pyz = PYZ(a.pure)
