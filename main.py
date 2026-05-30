@@ -10,6 +10,7 @@ from flask import Flask, render_template, request, jsonify, Response
 from core.llm_gateway import LLMGateway
 from core.config import load_config, save_config, update_config
 from core.file_ops import FileOps
+from core.shortcuts import load_shortcuts, add_shortcut, delete_shortcut
 from orchestrator.engine import Orchestrator
 from agents.file_manager import FileManagerAgent
 from agents.document import DocumentAgent
@@ -146,6 +147,29 @@ def save_search_config():
     if provider == "bing" and data.get("bing_api_key"):
         update_config("bing_api_key", data["bing_api_key"])
     return jsonify({"status": "ok"})
+
+@app.route("/api/shortcuts", methods=["GET"])
+def get_shortcuts():
+    """获取所有快捷指令"""
+    return jsonify(load_shortcuts())
+
+@app.route("/api/shortcuts", methods=["POST"])
+def create_shortcut():
+    """添加快捷指令"""
+    data = request.json
+    if not data or not data.get("trigger") or not data.get("command"):
+        return jsonify({"status": "error", "error": "trigger 和 command 不能为空"}), 400
+    result = add_shortcut(data["trigger"], data["command"], data.get("desc", ""))
+    return jsonify(result)
+
+@app.route("/api/shortcuts", methods=["DELETE"])
+def remove_shortcut():
+    """删除快捷指令"""
+    data = request.json or {}
+    trigger = data.get("trigger", "")
+    if not trigger:
+        return jsonify({"status": "error", "error": "trigger 不能为空"}), 400
+    return jsonify(delete_shortcut(trigger))
 
 @app.route("/settings")
 def settings():
