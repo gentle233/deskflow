@@ -44,12 +44,13 @@ if %errorlevel% neq 0 (
 echo.
 echo ================================
 echo    Build Complete!
-echo    Output: dist\DeskFlow.exe
-echo    Size: 
-for %%I in (dist\DeskFlow.exe) do @echo    %%~zI bytes
+echo    Output: dist\DeskFlow\
+echo    Files:
+dir /b dist\DeskFlow\ 2>nul
 echo ================================
 echo.
-echo 提示: 首次运行会在 %USERPROFILE%\.deskflow\
+echo 提示: 运行 dist\DeskFlow\DeskFlow.exe 启动桌面版
+echo 首次运行会在 %%USERPROFILE%%\.deskflow\
 echo 创建配置文件，请打开软件后配置 API Key。
 echo.
 pause

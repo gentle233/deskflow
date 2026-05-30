@@ -85,7 +85,7 @@ for _pkg in ['flask', 'jinja2', 'werkzeug', 'markupsafe',
     except Exception:
         pass
 
-# ── 打包 ──
+# ── 打包：One-Dir 模式（exe + 依赖文件放在同一目录） ──
 pyz = PYZ(a.pure)
 
 exe = EXE(
@@ -96,11 +96,23 @@ exe = EXE(
     a.datas,
     name='DeskFlow',
     debug=False,
-    console=False,        # 无控制台窗口（纯桌面应用）
+    console=False,
     disable_windowed_traceback=False,
-    upx=False,            # Windows Runner 不一定有 UPX
+    upx=False,
     icon=join(BASE, 'ui', 'icons', 'deskflow.ico'),
     strip=False,
     uac_admin=False,
     codepage='utf-8',
+)
+
+# COLLECT 把 dll/pyd/zip/资源全部放在 exe 同目录，启动即用不解压
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=False,
+    upx_exclude=[],
+    name='DeskFlow',
 )
