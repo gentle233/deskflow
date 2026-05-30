@@ -29,63 +29,20 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
-      - name: Generate spec from CLI (ensure all deps captured)
-        run: |
-          pyi-makespec --onedir --noconsole --name DeskFlow `
-            --icon ui/icons/deskflow.ico `
-            --add-data "ui/templates;ui/templates" `
-            --add-data "ui/static;ui/static" `
-            --add-data "ui/icons;ui/icons" `
-            run.py
-
-      - name: Patch spec to collect all submodules
-        run: |
-          $spec = Get-Content "DeskFlow.spec" -Raw
-          # Add collect-all for known packages
-          $patch = @'
-
-# Collect all submodules for major packages
-from PyInstaller.utils.hooks import collect_submodules
-for _pkg in ['flask', 'jinja2', 'werkzeug', 'markupsafe',
-             'pandas', 'openpyxl', 'apscheduler',
-             'watchdog', 'pywinauto', 'webview']:
-    try:
-        a.hiddenimports += collect_submodules(_pkg)
-        print(f"  Collected submodules for: {_pkg}")
-    except Exception as e:
-        print(f"  Warning: {_pkg} - {e}")
-
-'@
-          $spec = $spec -replace "(?s)(a = Analysis.*?)^(pyz = PYZ)", "`$1`n$patch`n`$2"
-          Set-Content "DeskFlow.spec" $spec
-          Write-Host "=== Patched spec ==="
-          Get-Content "DeskFlow.spec" | Select-Object -First 120
-
-      - name: Build EXE (One-Dir)
-        run: pyinstaller DeskFlow.spec
+      - name: Build EXE with SPEC
+        run: pyinstaller build.spec
 
       - name: Verify EXE
         run: |
           if (Test-Path "dist/DeskFlow/DeskFlow.exe") {
             $items = Get-ChildItem "dist/DeskFlow" -Directory
-            $totalSize = (Get-ChildItem "dist/DeskFlow" -Recurse | Measure-Object Length -Sum).Sum / 1MB
+            $totalSize = (Get-ChildItem "dist/DeskFlow" -Recurse -File | Measure-Object Length -Sum).Sum / 1MB
             Write-Host "✅ 构建成功 — $(Get-ChildItem 'dist/DeskFlow' -Recurse -File | Measure-Object).Count 个文件"
             Write-Host "   合计 $([math]::Round($totalSize, 1)) MB"
-            Write-Host "   目录:"
-            $items | ForEach-Object { Write-Host "     📁 $_ ($( (Get-ChildItem $_ -Recurse -File | Measure-Object Length -Sum).Sum / 1KB ) KB)" }
+            $items | ForEach-Object { Write-Host "   📁 $_" }
           } else {
-            Write-Error "❌ dist/DeskFlow/DeskFlow.exe 不存在"
-            exit 1
-          }
-
-      - name: Check Flask in bundle
-        run: |
-          if (Test-Path "dist/DeskFlow/flask") {
-            $flaskSize = (Get-ChildItem "dist/DeskFlow/flask" -Recurse -File | Measure-Object Length -Sum).Sum / 1KB
-            Write-Host "✅ flask 已打包 — $([math]::Round($flaskSize)) KB"
-          } else {
-            Write-Error "❌ flask 未打包！列出 dist 完整目录..."
-            Get-ChildItem "dist/DeskFlow" -Recurse -Depth 2 | Select-Object Mode, Length, Name | Format-Table -AutoSize
+            Write-Error "dist/DeskFlow/DeskFlow.exe 不存在"
+            Get-ChildItem "dist" -Recurse -Depth 1
             exit 1
           }
 
@@ -93,10 +50,10 @@ for _pkg in ['flask', 'jinja2', 'werkzeug', 'markupsafe',
         run: |
           $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
           if (Test-Path $iscc) {
-            & $iscc installer.iss
+            & $iscc installer.iss | Write-Host
             Write-Host "✅ 安装包构建成功"
           } else {
-            Write-Host "⚠ Inno Setup 未安装，跳过安装包"
+            Write-Host "⚠ Inno Setup 未安装，跳过"
           }
 
       - name: Upload Portable
@@ -106,6 +63,7 @@ for _pkg in ['flask', 'jinja2', 'werkzeug', 'markupsafe',
           path: dist/DeskFlow/
 
       - name: Upload Installer
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: DeskFlow-${{ github.event.inputs.version || github.ref_name }}-Setup
