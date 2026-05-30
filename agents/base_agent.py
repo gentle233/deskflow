@@ -25,5 +25,9 @@ class BaseAgent:
     def can_handle(self, task: Task) -> bool:
         return False
 
+    def get_capability_description(self) -> str:
+        """返回 Agent 的能力描述，用于主 Agent 的可用工具列表"""
+        return f"  - {self.name}: {self.description}"
+
     def execute(self, task: Task) -> Result:
         raise NotImplementedError
