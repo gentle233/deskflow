@@ -6,7 +6,7 @@ from os.path import join
 BASE = os.getcwd()
 block_cipher = None
 
-# ── 资源数据：递归收集 UI 目录 ──
+# 资源数据：递归收集 UI 目录
 datas = []
 for root, dirs, files in os.walk(join(BASE, 'ui')):
     dest = os.path.relpath(root, BASE)
@@ -40,7 +40,6 @@ a = Analysis(
         'apscheduler.triggers.interval',
         'apscheduler.schedulers.background',
         'sqlite3',
-        # pywebview internal backends
         'webview.platforms',
     ],
     hookspath=[],
@@ -52,10 +51,14 @@ a = Analysis(
     ],
 )
 
-# ── 强制全量收集大包（含所有子模块 + 数据文件 + DLL） ──
+# 强制全量收集大包
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
-print("=" * 60)
+_LOG = []
+def log(msg):
+    _LOG.append(msg)
+
+log("--- Collecting all submodules ---")
 for _pkg in ['flask', 'jinja2', 'werkzeug', 'markupsafe',
              'pandas', 'openpyxl', 'apscheduler',
              'watchdog', 'pywinauto', 'webview',
@@ -65,20 +68,23 @@ for _pkg in ['flask', 'jinja2', 'werkzeug', 'markupsafe',
         a.datas += _d
         a.binaries += _b
         a.hiddenimports += [m for m in _hi if m not in a.hiddenimports]
-        print(f"  ✅ collect_all({_pkg}): +{len(_hi)} modules, +{len(_d)} datas")
-    except Exception as e:
-        print(f"  ⚠ collect_all({_pkg}): {e}")
+        log(f"[OK] {_pkg}: +{len(_hi)} mods, +{len(_d)} datas")
+    except Exception as ex:
+        log(f"[WARN] {_pkg}: {ex}")
 
-# 额外收集 flask 子模块（确保万无一失）
+# 额外收集 flask 子模块
 try:
     extra = collect_submodules('flask')
     a.hiddenimports += [m for m in extra if m not in a.hiddenimports]
-    print(f"  ✅ collect_submodules('flask'): +{len(extra)} modules")
-except Exception as e:
-    print(f"  ⚠ collect_submodules('flask'): {e}")
-print("=" * 60)
+    log(f"[OK] flask submodules: +{len(extra)}")
+except Exception as ex:
+    log(f"[WARN] flask submodules: {ex}")
 
-# ── 打包 One-Dir ──
+log("--- Done ---")
+for line in _LOG:
+    print(line)
+
+# 打包 One-Dir
 pyz = PYZ(a.pure)
 
 exe = EXE(
