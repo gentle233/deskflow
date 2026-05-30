@@ -4,6 +4,7 @@ __pycache__/
 .env
 dist/
 build/
+installer/
 *.log
 *.db
 ~/.deskflow/
