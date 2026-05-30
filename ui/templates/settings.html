@@ -231,6 +231,45 @@
             </div>
 
             <div class="section">
+                <h3>⏰ 定时任务</h3>
+                <div class="card" id="tasks-card">
+                    <div id="tasks-empty" style="text-align:center;padding:16px;color:#999;font-size:13px">暂无定时任务</div>
+                    <div id="tasks-list"></div>
+
+                    <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eee">
+                        <div style="font-size:13px;color:#666;margin-bottom:8px">新建任务</div>
+                        <div style="display:flex;flex-direction:column;gap:6px">
+                            <div style="display:flex;gap:6px;flex-wrap:wrap">
+                                <input id="task-name" placeholder="任务名称" style="flex:1;min-width:120px;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px">
+                                <input id="task-prompt" placeholder="触发后执行的内容（发给 Agent 的指令）" style="flex:3;min-width:200px;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px">
+                            </div>
+                            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+                                <select id="task-trigger-type" onchange="toggleTaskType()" style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;background:#fff">
+                                    <option value="interval">间隔重复</option>
+                                    <option value="cron">Cron 定时</option>
+                                </select>
+                                <div id="task-interval-config" style="display:flex;gap:4px;align-items:center">
+                                    <span style="font-size:13px;color:#666">每</span>
+                                    <input id="task-interval-value" type="number" min="1" value="1" style="width:60px;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:13px">
+                                    <select id="task-interval-unit" style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;background:#fff">
+                                        <option value="minutes">分钟</option>
+                                        <option value="hours" selected>小时</option>
+                                        <option value="days">天</option>
+                                    </select>
+                                </div>
+                                <div id="task-cron-config" style="display:none;align-items:center;gap:4px">
+                                    <input id="task-cron" placeholder="如: 0 17 * * 5 (每周五17:00, 周日=0 周一=1)" style="width:300px;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px">
+                                    <span style="font-size:11px;color:#999">分 时 日 月 周</span>
+                                </div>
+                                <button onclick="createTask()" style="padding:6px 16px;background:#4a7cff;color:#fff;border:none;border-radius:6px;cursor:pointer">+ 创建</button>
+                            </div>
+                        </div>
+                        <div id="task-msg" style="font-size:12px;color:#999;padding:4px 0"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
                 <h3>错误日志</h3>
                 <div class="card" id="log-card">
                     <div class="log-toolbar">
@@ -568,6 +607,118 @@ setInterval(() => {
 
 // 加载日志
 loadLogs();
+
+// 定时任务
+let tasksLoaded = false;
+
+async function loadTasks() {
+    const list = document.getElementById('tasks-list');
+    const empty = document.getElementById('tasks-empty');
+    if (!list) return;
+    try {
+        const r = await fetch('/api/tasks');
+        const tasks = await r.json();
+        if (tasks.length === 0) {
+            list.innerHTML = '';
+            if (empty) empty.style.display = 'block';
+            return;
+        }
+        if (empty) empty.style.display = 'none';
+        list.innerHTML = tasks.map(t => {
+            const schedule = t.trigger_type === 'cron'
+                ? `Cron: <code>${escHtml(t.cron)}</code>`
+                : `每 ${t.interval_value} ${t.interval_unit === 'minutes' ? '分钟' : t.interval_unit === 'hours' ? '小时' : '天'}`;
+            const lastRun = t.last_run ? t.last_run.slice(11, 19) + ' ' + t.last_run.slice(0, 10) : '-';
+            const nextRun = t.next_run ? t.next_run.slice(11, 19) + ' ' + t.next_run.slice(0, 10) : '-';
+            const statusClass = t.enabled ? 'status-ok' : 'status-wait';
+            const statusText = t.enabled ? '✔ 启用' : '⏸ 暂停';
+            const shortPrompt = t.prompt.length > 40 ? escHtml(t.prompt.slice(0, 40)) + '…' : escHtml(t.prompt);
+            return `<div style="border:1px solid #eee;border-radius:8px;padding:10px 12px;margin-bottom:8px;background:#fafafa">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                    <span style="font-weight:600;font-size:14px">${escHtml(t.name)}</span>
+                    <span class="status-badge ${statusClass}" style="font-size:11px">${statusText}</span>
+                </div>
+                <div style="font-size:12px;color:#666;margin-bottom:4px">
+                    <span style="color:#999">${schedule}</span>
+                    <span style="margin:0 6px">·</span>
+                    <span title="${escHtml(t.prompt)}">${shortPrompt}</span>
+                </div>
+                <div style="font-size:11px;color:#999;display:flex;justify-content:space-between;align-items:center">
+                    <span>上次: ${lastRun} · 下次: ${nextRun}</span>
+                    <div style="display:flex;gap:4px">
+                        <button onclick="runTask('${t.id}')" title="立即执行" style="border:none;background:none;cursor:pointer;font-size:13px">▶</button>
+                        <button onclick="toggleTask('${t.id}')" title="${t.enabled ? '暂停' : '启用'}" style="border:none;background:none;cursor:pointer;font-size:13px">${t.enabled ? '⏸' : '▶️'}</button>
+                        <button onclick="deleteTask('${t.id}')" title="删除" style="border:none;background:none;cursor:pointer;color:#ff4d4f;font-size:13px">🗑</button>
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+        tasksLoaded = true;
+    } catch(e) {
+        if (list) list.innerHTML = '<div style="color:#ff4d4f;text-align:center">❌ 加载失败</div>';
+    }
+}
+
+function toggleTaskType() {
+    const type = document.getElementById('task-trigger-type')?.value;
+    document.getElementById('task-interval-config').style.display = type === 'interval' ? 'flex' : 'none';
+    document.getElementById('task-cron-config').style.display = type === 'cron' ? 'flex' : 'none';
+}
+
+async function createTask() {
+    const name = document.getElementById('task-name')?.value.trim();
+    const prompt = document.getElementById('task-prompt')?.value.trim();
+    const triggerType = document.getElementById('task-trigger-type')?.value;
+    const msg = document.getElementById('task-msg');
+    if (!name) { msg.textContent = '请输入任务名称'; return; }
+    if (!prompt) { msg.textContent = '请输入触发内容'; return; }
+
+    const data = {name, prompt, trigger_type: triggerType};
+    if (triggerType === 'cron') {
+        const cron = document.getElementById('task-cron')?.value.trim();
+        if (!cron) { msg.textContent = '请输入 Cron 表达式'; return; }
+        data.cron = cron;
+    } else {
+        data.interval_value = parseInt(document.getElementById('task-interval-value')?.value || '1');
+        data.interval_unit = document.getElementById('task-interval-unit')?.value || 'hours';
+    }
+
+    const r = await fetch('/api/tasks', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    });
+    const result = await r.json();
+    if (result.status === 'ok') {
+        msg.textContent = '✅ 已创建';
+        document.getElementById('task-name').value = '';
+        document.getElementById('task-prompt').value = '';
+        loadTasks();
+    } else {
+        msg.textContent = '❌ ' + (result.error || '创建失败');
+    }
+}
+
+async function toggleTask(id) {
+    await fetch('/api/tasks/' + id + '/toggle', {method: 'POST'});
+    loadTasks();
+}
+
+async function runTask(id) {
+    await fetch('/api/tasks/' + id + '/run', {method: 'POST'});
+    loadTasks();
+}
+
+async function deleteTask(id) {
+    if (!confirm('确定要删除此定时任务吗？')) return;
+    await fetch('/api/tasks/' + id, {method: 'DELETE'});
+    loadTasks();
+}
+
+// 加载定时任务
+loadTasks();
+// 每 30 秒刷新（更新下次运行时间）
+setInterval(loadTasks, 30000);
 
 // 恢复提示音开关状态
 const soundToggle = document.getElementById('sound-toggle');

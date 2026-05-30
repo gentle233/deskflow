@@ -13,6 +13,10 @@ from core.file_ops import FileOps
 from core.shortcuts import load_shortcuts, add_shortcut, delete_shortcut
 from core.logger import logger, get_log_lines, clear_logs as clear_log_files
 from core.file_monitor import get_monitor
+from core.task_scheduler import (
+    list_tasks, create_task, update_task, delete_task,
+    toggle_task, run_task_now, register_callback, init_scheduler
+)
 from autolearn.models import init_db as init_autolearn_db, get_active_patterns, dismiss_pattern, count_events_last_24h, get_db_size_mb
 from autolearn.collector import start_collectors
 from autolearn.analyzer import run_analysis, purge_old_data
@@ -286,6 +290,38 @@ def monitor_remove_dir():
     m = get_monitor()
     return jsonify(m.remove_directory(path))
 
+@app.route("/api/tasks", methods=["GET"])
+def api_tasks_list():
+    """获取所有定时任务"""
+    return jsonify(list_tasks())
+
+@app.route("/api/tasks", methods=["POST"])
+def api_tasks_create():
+    """创建定时任务"""
+    data = request.json or {}
+    return jsonify(create_task(data))
+
+@app.route("/api/tasks/<task_id>", methods=["PUT"])
+def api_tasks_update(task_id):
+    """更新定时任务"""
+    data = request.json or {}
+    return jsonify(update_task(task_id, data))
+
+@app.route("/api/tasks/<task_id>", methods=["DELETE"])
+def api_tasks_delete(task_id):
+    """删除定时任务"""
+    return jsonify(delete_task(task_id))
+
+@app.route("/api/tasks/<task_id>/toggle", methods=["POST"])
+def api_tasks_toggle(task_id):
+    """启用/禁用定时任务"""
+    return jsonify(toggle_task(task_id))
+
+@app.route("/api/tasks/<task_id>/run", methods=["POST"])
+def api_tasks_run(task_id):
+    """立即执行定时任务"""
+    return jsonify(run_task_now(task_id))
+
 @app.route("/settings")
 def settings():
     """配置页面"""
@@ -303,6 +339,15 @@ def _init_orchestrator():
     orchestrator.dispatcher.register(ExcelAgent())
     orchestrator.dispatcher.register(WebSearchAgent())
     orchestrator.dispatcher.register(MemoryAgent())
+    # 注册定时任务回调
+    def _task_callback(task, prompt):
+        try:
+            logger.info("⏰ 执行定时任务: %s — %s", task.get("name", "?"), prompt[:80])
+            reply = orchestrator.process(prompt)
+            logger.info("⏰ 任务完成: %s — %s", task.get("name", "?"), reply[:100])
+        except Exception as e:
+            logger.error("⏰ 任务执行失败 [%s]: %s", task.get("name", "?"), e)
+    register_callback(_task_callback)
 
 def main():
     init_db()
@@ -322,6 +367,11 @@ def main():
             get_monitor().start()
         except Exception as e:
             logger.warning("文件监控启动失败: %s", e)
+        # 启动定时任务调度器
+        try:
+            init_scheduler()
+        except Exception as e:
+            logger.warning("定时任务调度器启动失败: %s", e)
     # 启动 Flask
     app.run(host="127.0.0.1", port=7788, debug=False)
 
