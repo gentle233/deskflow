@@ -1,6 +1,7 @@
 """总控引擎 - 聊天主循环 + Tool 执行层"""
 import re
 import os
+import json
 from orchestrator.intent_router import IntentRouter
 from orchestrator.scheduler import AgentDispatcher
 from core.llm_gateway import LLMGateway
@@ -8,9 +9,6 @@ from core.llm_gateway import LLMGateway
 class Orchestrator:
     """用户唯一的入口，负责理解、分解、调度、整合"""
 
-    # =====================================================
-    # Tool 定义区 — Agent 通过这里操作外部系统
-    # =====================================================
     TOOL_DEFINITIONS = """
 你有以下工具可以使用。当需要执行实际操作时，在回复中按格式输出：
 
@@ -44,9 +42,6 @@ class Orchestrator:
    [/TOOL]
    """
 
-    # =====================================================
-    # 主控 Agent System Prompt — 红线 + 工作流输出格式
-    # =====================================================
     MASTER_PROMPT = """\
 你是 DeskFlow 的主控 Agent，位于工作流引擎的最上层，负责理解用户意图并决定响应方式。
 
@@ -77,7 +72,7 @@ class Orchestrator:
 
 ## 工作流输出格式
 
-当你判断需要进入工作流时，请按以下格式输出标记块，每行一个标记，引擎会逐行解析并执行：
+当你判断需要进入工作流时，请按以下格式输出标记块：
 
 [mode: 模式名称]
 [step: 1]
@@ -102,147 +97,212 @@ class Orchestrator:
 [description: 第二步描述]
 
 ### 格式说明
-- `[mode: ...]` — 工作模式名称，如 "文件操作"、"数据分析"、"信息查询"
-- `[step: N]` — 当前步骤编号，从 1 开始
-- `[action: call_agent]` — 动作类型，目前固定为 call_agent
-- `[agent: ...]` — 要调用的 SubAgent 名称，必须来自可用 SubAgent 列表
-- `[params: ...]` — JSON 格式的参数，传递给 SubAgent
-- `[description: ...]` — 当前步骤的简要描述，用于日志和用户可见反馈
+- [mode: xxx] — 工作模式名称
+- [step: N] — 步骤编号
+- [action: call_agent] — 调 SubAgent
+- [action: ask_user] — 需要用户确认
+- [agent: xxx] — SubAgent 名称
+- [params: xxx] — JSON 参数
+- [description: xxx] — 步骤描述
 
 ## 输出规范
-
-- 如不进工作流 → 直接输出普通回复，简洁自然
-- 如需用户确认 → 先输出问题等待用户回答，不进工作流
-- 如需进入工作流 → 输出上述标记格式，引擎执行完会返回结果，你根据结果继续处理
-- 始终使用中文回复（除非用户用其他语言提问）
+- 不进工作流 → 直接回复
+- 需用户确认 → 输出 [action: ask_user]
+- 调 SubAgent → 输出 [action: call_agent]
+- 始终用中文回复
 """
-
-    # =====================================================
-    # 主控 Agent System Prompt — 红线 + 工作流输出格式
-    
 
     def __init__(self, llm: LLMGateway):
         self.llm = llm
         self.router = IntentRouter(llm=llm)
         self.dispatcher = AgentDispatcher()
         self.history: list[dict] = []
-        self.tools_enabled = False  # 第一次调用时自动开启
+        self.tools_enabled = False
+        self._workflow_state: dict | None = None
+
+    # =========================================================
+    # 主入口
+    # =========================================================
 
     def process(self, user_input: str) -> str:
-        """主控入口：先走红线判断，再进工作流循环"""
+        """主控入口：先检查暂停的工作流，再走红线判断"""
         self.history.append({"role": "user", "content": user_input})
 
-        # 1. 构建主 Agent 上下文（含 MASTER_PROMPT）
+        # 0. 检查是否有暂停的工作流
+        if self._workflow_state is not None:
+            return self._resume_workflow(user_input)
+
+        # 1. 构建主 Agent 上下文
         context = self._build_master_context(user_input)
 
-        # 2. 先调一次 LLM，看是直接回复还是进工作流
+        # 2. 调 LLM
         reply = self.llm.chat(context, stream=False)
 
         # 3. 检查是否有工作流标记
-        mode = self._parse_mode(reply)
-        if not mode:
-            # 红线命中：直接回复
+        if not self._parse_mode(reply):
             self.history.append({"role": "assistant", "content": reply})
             return reply
 
-        # 4. 进入工作流循环（最多 10 步）
+        # 4. 进入工作流循环
+        return self._run_workflow(context, reply)
+
+    def _run_workflow(self, context: list, reply: str) -> str:
+        """执行工作流循环，支持 ask_user 暂停"""
+        mode = self._parse_mode(reply)
         context.append({"role": "assistant", "content": reply})
+
         for step_idx in range(10):
+            # 检查 ask_user
+            if self._has_action(reply, "ask_user"):
+                self._workflow_state = {
+                    "context": context,
+                    "step": step_idx,
+                    "mode": mode,
+                }
+                desc = self._extract_description(reply) or "请确认是否继续？"
+                self.history.append({"role": "assistant", "content": reply})
+                return (
+                    f"{reply}\n\n"
+                    f"---\n"
+                    f"⏸️ 等待您确认: {desc}\n"
+                    f'回复 "确认" 继续，或 "取消" 中止'
+                )
+
+            # 检查 agent 调用
             agent_call = self._parse_agent_call(reply)
             if not agent_call:
-                break  # 没有 agent 调用了，结束工作流
+                break
 
             # 执行 SubAgent
             agent_name = agent_call["agent"]
             params = agent_call.get("params", {})
-            result = self.dispatcher.dispatch(agent_name, params, user_input)
+            result = self.dispatcher.dispatch(agent_name, params, "")
 
-            # 把结果喂回 LLM
-            result_text = f"[SubAgent 执行结果]\n{result.summary if result.success else result.error}"
+            # 结果喂回 LLM
+            result_text = (
+                f"[SubAgent 执行结果]\n"
+                f"{result.summary if result.success else result.error}"
+            )
             context.append({"role": "user", "content": result_text})
 
             # LLM 决定下一步
             reply = self.llm.chat(context, stream=False)
             context.append({"role": "assistant", "content": reply})
 
-            # 检查是否还有下一步
-            if not self._parse_agent_call(reply):
+            if not self._parse_agent_call(reply) and not self._has_action(reply, "ask_user"):
                 break
 
         self.history.append({"role": "assistant", "content": reply})
         return reply
 
+    def _resume_workflow(self, user_input: str) -> str:
+        """恢复暂停的工作流"""
+        confirm_kw = ["确认", "可以", "继续", "好", "嗯", "是的", "执行", "对", "行", "ok"]
+        cancel_kw = ["不行", "不要", "取消", "中止", "停止", "改一下", "换一个", "重来", "撤销", "退回"]
+
+        text = user_input.strip().lower()
+        is_confirm = any(kw in text for kw in confirm_kw)
+        is_cancel = any(kw in text for kw in cancel_kw)
+
+        context = self._workflow_state["context"]
+        mode = self._workflow_state.get("mode", "")
+
+        if is_cancel:
+            self._workflow_state = None
+            self.history.append({"role": "assistant", "content": "已取消当前操作"})
+            return "好的，已取消当前操作。还有什么需要帮忙的吗？"
+
+        if not is_confirm:
+            # 没确认也没取消，当作普通对话但保留状态
+            context.append({"role": "user", "content": user_input})
+            reply = self.llm.chat(context, stream=False)
+            context.append({"role": "assistant", "content": reply})
+            self._workflow_state["context"] = context
+            self.history.append({"role": "assistant", "content": reply})
+            return reply
+
+        # 用户确认 → 继续工作流
+        context.append({"role": "user", "content": "用户已确认，请继续执行下一步"})
+        self._workflow_state = None  # 清除暂停，后面的步骤正常走
+
+        reply = self.llm.chat(context, stream=False)
+        return self._run_workflow(context, reply)
+
+    # =========================================================
+    # 上下文构建
+    # =========================================================
+
     def _build_master_context(self, user_input: str) -> list:
-        """构建主 Agent 上下文：MASTER_PROMPT + 历史 + 当前输入"""
         agent_list = self._build_agent_list()
         workflow_list = self._build_workflow_list()
-
         system_content = self.MASTER_PROMPT.format(
-            agent_list=agent_list,
-            workflow_list=workflow_list
+            agent_list=agent_list, workflow_list=workflow_list
         )
-
         messages = [{"role": "system", "content": system_content}]
-        # 带上最近 4 轮对话历史
         messages.extend(self.history[-8:])
         return messages
 
     def _build_agent_list(self) -> str:
-        """动态生成可用 SubAgent 列表"""
-        dispatcher = getattr(self, 'dispatcher', None)
-        if dispatcher is None or not hasattr(dispatcher, '_agents') or not dispatcher._agents:
+        dispatcher = getattr(self, "dispatcher", None)
+        if dispatcher is None or not hasattr(dispatcher, "_agents") or not dispatcher._agents:
             return "（暂无可用 SubAgent）"
         lines = []
-        for name, agent in self.dispatcher._agents.items():
-            desc = getattr(agent, 'description', name)
+        for name, agent in dispatcher._agents.items():
+            desc = getattr(agent, "description", name)
             lines.append(f"  - {name}: {desc}")
         return "\n".join(lines)
 
     def _build_workflow_list(self) -> str:
-        """动态生成可用工作模式列表"""
         try:
             from orchestrator.workflows import get_workflow_list_text
             return get_workflow_list_text()
         except ImportError:
             return "（暂无预设工作模式，由你自行编排）"
 
+    # =========================================================
+    # LLM 输出解析
+    # =========================================================
+
     def _parse_mode(self, reply: str) -> str | None:
-        """从 LLM 回复中提取 [mode: xxx]"""
         m = re.search(r'\[mode:\s*(.+?)\]', reply)
         return m.group(1).strip() if m else None
 
     def _parse_agent_call(self, reply: str) -> dict | None:
-        """从 LLM 回复中提取 agent 调用参数"""
-        # 查找 [action: call_agent] 块
         action_match = re.search(r'\[action:\s*call_agent\]', reply)
         if not action_match:
             return None
-
-        # 提取 agent 名称
         agent_match = re.search(r'\[action:\s*call_agent\]\s*\n\s*\[agent:\s*(.+?)\]', reply)
         agent_name = agent_match.group(1).strip() if agent_match else None
         if not agent_name:
             return None
-
-        # 提取 params
         params = {}
         params_match = re.search(r'\[params:\s*(\{.*?\})\]', reply)
         if params_match:
             try:
-                import json
                 params = json.loads(params_match.group(1))
             except json.JSONDecodeError:
                 pass
-
         return {"agent": agent_name, "params": params}
 
+    def _has_action(self, reply: str, action: str) -> bool:
+        return f"[action: {action}]" in reply
+
+    def _extract_description(self, reply: str) -> str | None:
+        m = re.search(r'\[description:\s*(.+?)\]', reply)
+        return m.group(1).strip() if m else None
+
+    # =========================================================
+    # 旧版兼容：Tool 执行
+    # =========================================================
+
     def _build_context(self, user_input: str, agent_results: list) -> list:
-        """旧版上下文构建（保留兼容）"""
         messages = [{
             "role": "system",
-            "content": "你是 DeskFlow 桌面助手，用中文回答。简洁专业。\n\n"
-                       + self.TOOL_DEFINITIONS
-                       + "\n当用户要求保存/读取/搜索文件时，请使用上述工具。不需要工具时正常回复即可。"
+            "content": (
+                "你是 DeskFlow 桌面助手，用中文回答。简洁专业。\n\n"
+                + self.TOOL_DEFINITIONS
+                + "\n当用户要求保存/读取/搜索文件时，请使用上述工具。不需要工具时正常回复即可。"
+            )
         }]
         messages.extend(self.history[-6:])
         for r in agent_results:
@@ -253,7 +313,6 @@ class Orchestrator:
         return messages
 
     def _execute_tools(self, reply: str) -> list:
-        """解析 LLM 回复中的 tool 调用并执行（保留兼容）"""
         results = []
         pattern = r'\[TOOL:\s*(\w+)\](.*?)\[/TOOL\]'
         for match in re.finditer(pattern, reply, re.DOTALL):
@@ -274,7 +333,6 @@ class Orchestrator:
         return results
 
     def _parse_tool_params(self, body: str) -> dict:
-        """解析 tool 参数块"""
         params = {}
         for line in body.split("\n"):
             line = line.strip()
@@ -322,7 +380,10 @@ class Orchestrator:
         import pandas as pd
         try:
             df = pd.read_excel(path) if not path.endswith(".csv") else pd.read_csv(path)
-            return f"📊 {os.path.basename(path)}: {len(df)}行×{len(df.columns)}列\n列名: {list(df.columns)}\n预览:\n{df.head(5).to_string()}"
+            return (
+                f"📊 {os.path.basename(path)}: {len(df)}行×{len(df.columns)}列\n"
+                f"列名: {list(df.columns)}\n"
+                f"预览:\n{df.head(5).to_string()}"
+            )
         except Exception as e:
             return f"❌ 读取失败: {e}"
-
