@@ -2,10 +2,10 @@
 """DeskFlow PyInstaller 构建配置 — 桌面窗口版"""
 
 import os
-import sys
-from os.path import join, dirname
+from os.path import join
 
-BASE = dirname(__file__)
+# PyInstaller spec 中不能用 __file__，用 os.getcwd() 代替
+BASE = os.getcwd()
 
 # ── 资源数据：UI 模板 / 静态文件 / 图标 ──
 ui_datas = [
