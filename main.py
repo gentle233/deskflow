@@ -26,6 +26,7 @@ from agents.document import DocumentAgent
 from agents.excel import ExcelAgent
 from agents.web_search import WebSearchAgent
 from agents.memory import MemoryAgent
+from agents.window_ops import WindowOpsAgent
 from memory.store import init_db
 
 # 应用根目录
@@ -339,6 +340,7 @@ def _init_orchestrator():
     orchestrator.dispatcher.register(ExcelAgent())
     orchestrator.dispatcher.register(WebSearchAgent())
     orchestrator.dispatcher.register(MemoryAgent())
+    orchestrator.dispatcher.register(WindowOpsAgent())
     # 注册定时任务回调
     def _task_callback(task, prompt):
         try:

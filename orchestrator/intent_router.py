@@ -28,7 +28,18 @@ class IntentRouter:
 5. web_search: 联网搜索
    - 用户说"查一下""搜一搜""最近的新闻""搜索"
 
-6. chat: 普通对话（没有明确任务的闲聊）
+6. window_ops: Windows 窗口操作
+   - 用户说"打开计算器""最小化所有窗口""帮我关闭记事本"
+   - 用户说"截个屏""列出所有窗口""切换到浏览器"
+   - 用户说"在记事本里输入一些文字"
+   - window_list: 列出所有窗口
+   - window_activate: 激活窗口
+   - window_close: 关闭窗口
+   - window_type: 输入文字
+   - window_click: 点击按钮
+   - window_screenshot: 截屏
+
+7. chat: 普通对话（没有明确任务的闲聊）
    - 用户说"你好""今天天气""你是谁"等通用对话
 
 输出格式（严格 JSON，不要 markdown 包裹）：
@@ -71,6 +82,11 @@ class IntentRouter:
             (r"(汇总|分析|统计|整理|计算).*(excel|表格|报表|数据|销售|报销|支出|收入)", "excel_analyze", "表格分析"),
             (r"(查|搜).*(网|信息|资料|新闻|价格|天气|股票)", "web_search", "网络搜索"),
             (r"(调|写|发).*(邮件|mail)", "mail", "邮件处理"),
+            (r"(打开|启动|运行|切换到|最小化|关闭|关掉).*(窗口|计算器|记事本|浏览器|应用|程序|软件)", "window_activate", "窗口操作"),
+            (r"(窗口|列出|所有).*(窗口|列表)", "window_list", "列出窗口"),
+            (r"(输入|键入|写|打字).*(文字|文本|内容)", "window_type", "窗口输入"),
+            (r"(截图|截屏)", "window_screenshot", "屏幕截图"),
+            (r"(最小化|隐藏).*(窗口|所有)", "window_minimize", "最小化窗口"),
         ]
 
     def route(self, text: str) -> list:
