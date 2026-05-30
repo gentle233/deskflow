@@ -6,7 +6,7 @@ import json
 # 保证可以导入项目模块
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, Response
 from core.llm_gateway import LLMGateway
 from core.config import load_config, save_config, update_config
 from core.file_ops import FileOps
@@ -71,6 +71,42 @@ def chat():
     except Exception as e:
         reply = f"⚠️ 处理出错: {str(e)}"
     return jsonify({"reply": reply})
+
+
+
+@app.route("/api/chat/stream", methods=["POST"])
+def chat_stream():
+    """流式聊天接口 — SSE"""
+    message = request.form.get("message", "")
+    file = request.files.get("file")
+
+    if file:
+        upload_dir = os.path.expanduser("~/.deskflow/uploads")
+        os.makedirs(upload_dir, exist_ok=True)
+        filepath = os.path.join(upload_dir, file.filename)
+        file.save(filepath)
+        content = FileOps.read(filepath)
+        message = f"{message}\n\n[文件内容: {file.filename}]\n{content[:3000]}"
+
+    if not orchestrator:
+        return jsonify({"reply": "请先完成初始配置"})
+
+    def generate():
+        try:
+            reply = orchestrator.process(message)
+            CHUNK = 3
+            for i in range(0, len(reply), CHUNK):
+                chunk = reply[i:i + CHUNK]
+                data = json.dumps({"token": chunk})
+                yield "data: " + data + "\n\n"
+            data = json.dumps({"done": True})
+            yield "data: " + data + "\n\n"
+        except Exception as e:
+            data = json.dumps({"error": str(e)})
+            yield "data: " + data + "\n\n"
+
+    return Response(generate(), mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 @app.route("/api/config", methods=["GET"])
 def get_config():
