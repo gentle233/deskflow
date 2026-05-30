@@ -132,6 +132,10 @@
                         <span class="label">提示音</span>
                         <label><input type="checkbox" id="sound-toggle" checked onchange="localStorage.setItem('deskflow_sound', this.checked ? 'on' : 'off')"> 消息提醒音</label>
                     </div>
+                    <div class="row">
+                        <span class="label">自动学习</span>
+                        <span class="value" id="autolearn-stats">加载中...</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -244,6 +248,11 @@ loadShortcuts();
 // 恢复提示音开关状态
 const soundToggle = document.getElementById('sound-toggle');
 if (soundToggle) soundToggle.checked = localStorage.getItem('deskflow_sound') !== 'off';
+// 加载自动学习统计
+fetch('/api/autolearn/stats').then(r=>r.json()).then(d=>{
+    const el = document.getElementById('autolearn-stats');
+    if (el) el.textContent = `📊 今日${d.events_today}条事件 · ${d.active_patterns}条模式 · ${d.storage_mb}MB`;
+}).catch(()=>{});
 </script>
 
 </body>
