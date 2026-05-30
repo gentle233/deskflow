@@ -209,6 +209,42 @@ document.addEventListener('DOMContentLoaded', () => {
         URL.revokeObjectURL(url);
     }
 
+    // 学习建议面板
+    async function loadSuggestions() {
+        try {
+            const r = await fetch('/api/autolearn/suggestions');
+            const suggestions = await r.json();
+            const list = document.getElementById('learn-list');
+            if (!list) return;
+            if (suggestions.length === 0) {
+                list.innerHTML = '<div style="color:#999">暂无建议，多使用后会自动生成</div>';
+                return;
+            }
+            list.innerHTML = suggestions.map(s => `
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:3px 0">
+                    <span>${escHtml(s.title)}</span>
+                    <button onclick="dismissSuggestion(${s.id})" style="border:none;background:none;color:#999;cursor:pointer;font-size:12px">✕</button>
+                </div>
+            `).join('');
+        } catch(e) {}
+    }
+    window.dismissSuggestion = async function(id) {
+        await fetch('/api/autolearn/dismiss/' + id, {method:'POST'});
+        loadSuggestions();
+    };
+    document.getElementById('learn-btn')?.addEventListener('click', () => {
+        const panel = document.getElementById('learn-panel');
+        if (panel) {
+            const isOpen = panel.style.display !== 'none';
+            panel.style.display = isOpen ? 'none' : 'block';
+            if (!isOpen) loadSuggestions();
+        }
+    });
+    document.getElementById('learn-close')?.addEventListener('click', () => {
+        const panel = document.getElementById('learn-panel');
+        if (panel) panel.style.display = 'none';
+    });
+
     // History
     const STORAGE_KEY = 'deskflow_history';
     function saveToHistory(userMsg, assistantMsg) {
