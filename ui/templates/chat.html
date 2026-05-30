@@ -15,6 +15,7 @@
             <span id="status-text">已连接</span>
             <a href="javascript:void(0)" id="export-btn" title="导出聊天记录" style="margin-right:8px;text-decoration:none;font-size:18px">📥</a>
             <a href="javascript:void(0)" id="learn-btn" title="学习建议" style="margin-right:8px;text-decoration:none;font-size:16px">💡</a>
+            <a href="javascript:void(0)" id="monitor-btn" title="文件变化" style="margin-right:8px;text-decoration:none;font-size:16px;position:relative">📂<span id="monitor-dot" style="display:none;position:absolute;top:-2px;right:-4px;width:8px;height:8px;background:#ff4d4f;border-radius:50%;border:1px solid #fff"></span></a>
             <a href="/settings" id="settings-btn" title="设置">⚙️</a>
         </div>
 
@@ -25,6 +26,15 @@
                 <span id="learn-close" style="cursor:pointer;color:#999;font-size:16px">✕</span>
             </div>
             <div id="learn-list"></div>
+        </div>
+
+        <!-- 文件变化面板 -->
+        <div id="monitor-panel" style="display:none;background:#fff8f0;border-bottom:1px solid #ffe0b0;padding:8px 16px;font-size:13px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                <span style="font-weight:600;color:#e67e22">📂 最近文件变化</span>
+                <span id="monitor-close" style="cursor:pointer;color:#999;font-size:16px">✕</span>
+            </div>
+            <div id="monitor-list"></div>
         </div>
 
         <!-- 聊天记录 -->

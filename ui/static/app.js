@@ -245,6 +245,61 @@ document.addEventListener('DOMContentLoaded', () => {
         if (panel) panel.style.display = 'none';
     });
 
+    // 文件变化面板
+    let monitorEventCount = 0;
+    document.getElementById('monitor-btn')?.addEventListener('click', () => {
+        const panel = document.getElementById('monitor-panel');
+        if (panel) {
+            const isOpen = panel.style.display !== 'none';
+            panel.style.display = isOpen ? 'none' : 'block';
+            if (!isOpen) loadMonitorEvents();
+        }
+    });
+    document.getElementById('monitor-close')?.addEventListener('click', () => {
+        const panel = document.getElementById('monitor-panel');
+        if (panel) panel.style.display = 'none';
+    });
+
+    async function loadMonitorEvents() {
+        const list = document.getElementById('monitor-list');
+        if (!list) return;
+        try {
+            const r = await fetch('/api/monitor/events?count=10');
+            const events = await r.json();
+            if (events.length === 0) {
+                list.innerHTML = '<span style="color:#999">暂无文件变化</span>';
+                return;
+            }
+            list.innerHTML = events.map(e => {
+                const icon = e.event_type === 'created' ? '🟢' : e.event_type === 'modified' ? '🔵' : e.event_type === 'deleted' ? '🔴' : '🟡';
+                const time = e.timestamp ? e.timestamp.slice(11, 19) : '';
+                return `<div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px">
+                    <span>${icon}</span>
+                    <span style="color:#999;min-width:50px">${time}</span>
+                    <span style="flex:1">${escHtml(e.file_name)}</span>
+                </div>`;
+            }).join('');
+        } catch(e) {
+            list.innerHTML = '<span style="color:#ff4d4f">❌ 加载失败</span>';
+        }
+    }
+
+    // 每 60 秒检查是否有新事件（显示小红点）
+    let lastEventCount = 0;
+    setInterval(async () => {
+        try {
+            const r = await fetch('/api/monitor/status');
+            const s = await r.json();
+            const dot = document.getElementById('monitor-dot');
+            if (dot) {
+                if (s.event_count > lastEventCount && s.event_count > 0) {
+                    dot.style.display = 'block';
+                }
+                lastEventCount = s.event_count;
+            }
+        } catch(e) {}
+    }, 60000);
+
     // History
     const STORAGE_KEY = 'deskflow_history';
     function saveToHistory(userMsg, assistantMsg) {

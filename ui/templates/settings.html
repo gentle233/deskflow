@@ -99,6 +99,13 @@
         .log-line-warning { color: #fab387; }
         .log-line-info { color: #89b4fa; }
         .log-line-other { color: #6c7086; }
+        /* 事件标签 */
+        .event-tab {
+            padding: 2px 8px; border: 1px solid #ddd; border-radius: 4px;
+            background: #f5f5f5; cursor: pointer; font-size: 11px; color: #666;
+        }
+        .event-tab.active { background: #4a7cff; color: #fff; border-color: #4a7cff; }
+        .event-icon { margin-right: 4px; }
     </style>
 </head>
 <body>
@@ -172,7 +179,8 @@
                     <div class="row"><span class="label">文档读取/生成</span><span class="value">✔ 已实现</span></div>
                     <div class="row"><span class="label">Excel 分析</span><span class="value">✔ 已实现</span></div>
                     <div class="row"><span class="label">联网搜索</span><span class="value">⚠ 服务器可能受限</span></div>
-                    <div class="row"><span class="label">用户习惯学习</span><span class="value">❌ 尚未实现</span></div>
+                    <div class="row"><span class="label">用户习惯学习</span><span class="value">✔ 已实现</span></div>
+                    <div class="row"><span class="label">文件监控</span><span class="value">✔ 已实现</span></div>
                     <div class="row"><span class="label">邮件处理</span><span class="value">❌ 未实现</span></div>
                     <div class="row"><span class="label">自动化任务</span><span class="value">❌ 未实现</span></div>
                     <div class="row">
@@ -182,6 +190,42 @@
                     <div class="row">
                         <span class="label">自动学习</span>
                         <span class="value" id="autolearn-stats">加载中...</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h3>📁 文件监控</h3>
+                <div class="card" id="monitor-card">
+                    <div class="row">
+                        <span class="label">监控状态</span>
+                        <span id="monitor-status-badge" class="status-badge status-wait">检查中...</span>
+                    </div>
+                    <div class="row" style="justify-content:flex-start;gap:8px">
+                        <button id="monitor-toggle-btn" onclick="toggleMonitor()" style="padding:6px 16px;background:#4a7cff;color:#fff;border:none;border-radius:6px;cursor:pointer">启动</button>
+                    </div>
+                    <div style="margin-top:12px">
+                        <div style="font-size:13px;color:#666;margin-bottom:6px">监控目录</div>
+                        <div id="monitor-dirs"></div>
+                        <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
+                            <input id="monitor-add-path" type="text" placeholder="输入绝对路径" style="flex:1;min-width:120px;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px">
+                            <button onclick="addMonitorDir()" style="padding:6px 16px;background:#4a7cff;color:#fff;border:none;border-radius:6px;cursor:pointer">+ 添加</button>
+                        </div>
+                        <div id="monitor-msg" style="font-size:12px;color:#999;padding:4px 0"></div>
+                    </div>
+                    <div style="margin-top:12px">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                            <span style="font-size:13px;color:#666">最近文件变化</span>
+                            <div style="display:flex;gap:4px">
+                                <button class="event-tab active" data-type="" onclick="switchEventTab(this, '')">全部</button>
+                                <button class="event-tab" data-type="created" onclick="switchEventTab(this, 'created')">新建</button>
+                                <button class="event-tab" data-type="modified" onclick="switchEventTab(this, 'modified')">修改</button>
+                                <button class="event-tab" data-type="deleted" onclick="switchEventTab(this, 'deleted')">删除</button>
+                            </div>
+                        </div>
+                        <div id="monitor-events" style="max-height:250px;overflow-y:auto;background:#fafafa;border-radius:6px;border:1px solid #eee;font-size:12px">
+                            <div style="padding:20px;text-align:center;color:#999">加载中...</div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -396,6 +440,131 @@ function confirmClearLogs() {
 setInterval(() => {
     if (logAutoRefresh) loadLogs();
 }, 15000);
+
+let eventType = '';
+
+// 文件监控
+async function loadMonitorStatus() {
+    try {
+        const r = await fetch('/api/monitor/status');
+        const s = await r.json();
+        const badge = document.getElementById('monitor-status-badge');
+        const btn = document.getElementById('monitor-toggle-btn');
+        if (!badge) return;
+        if (s.running) {
+            badge.className = 'status-badge status-ok';
+            badge.textContent = '✔ 运行中 (' + s.event_count + ' 条事件)';
+            if (btn) btn.textContent = '停止监控';
+        } else {
+            badge.className = 'status-badge status-wait';
+            badge.textContent = '⏸ 已停止';
+            if (btn) btn.textContent = '启动监控';
+        }
+        // 目录列表
+        const dirsEl = document.getElementById('monitor-dirs');
+        if (dirsEl) {
+            if (s.watched_dirs.length === 0) {
+                dirsEl.innerHTML = '<span style="color:#999">暂无监控目录</span>';
+            } else {
+                dirsEl.innerHTML = s.watched_dirs.map(d =>
+                    `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 8px;background:#f5f5f5;border-radius:4px;margin-bottom:4px">
+                        <span style="font-size:12px">📂 ${escHtml(d)}</span>
+                        <button onclick="removeMonitorDir('${escHtml(d)}')" style="border:none;background:none;color:#ff4d4f;cursor:pointer;font-size:12px">✕</button>
+                    </div>`
+                ).join('');
+            }
+        }
+    } catch(e) {}
+}
+
+async function toggleMonitor() {
+    const badge = document.getElementById('monitor-status-badge');
+    if (!badge) return;
+    const isRunning = badge.textContent.includes('运行中');
+    if (isRunning) {
+        await fetch('/api/monitor/stop', {method:'POST'});
+    } else {
+        await fetch('/api/monitor/start', {method:'POST'});
+    }
+    loadMonitorStatus();
+    loadEvents();
+}
+
+async function addMonitorDir() {
+    const input = document.getElementById('monitor-add-path');
+    const msg = document.getElementById('monitor-msg');
+    const path = input?.value.trim();
+    if (!path) { msg.textContent = '请输入路径'; return; }
+    const r = await fetch('/api/monitor/dirs', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({path})
+    });
+    const d = await r.json();
+    if (d.status === 'ok') {
+        msg.textContent = '✅ 已添加';
+        input.value = '';
+        loadMonitorStatus();
+    } else {
+        msg.textContent = '❌ ' + (d.error || '添加失败');
+    }
+}
+
+async function removeMonitorDir(path) {
+    const r = await fetch('/api/monitor/dirs', {
+        method:'DELETE', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({path})
+    });
+    const d = await r.json();
+    loadMonitorStatus();
+}
+
+async function loadEvents() {
+    const el = document.getElementById('monitor-events');
+    if (!el) return;
+    const url = `/api/monitor/events?count=30&type=${eventType}`;
+    try {
+        const r = await fetch(url);
+        const events = await r.json();
+        if (events.length === 0) {
+            el.innerHTML = '<div style="padding:20px;text-align:center;color:#999">暂无文件变化</div>';
+            return;
+        }
+        el.innerHTML = events.map(e => {
+            const icon = e.event_type === 'created' ? '🟢' : e.event_type === 'modified' ? '🔵' : e.event_type === 'deleted' ? '🔴' : '🟡';
+            const time = e.timestamp ? e.timestamp.slice(11, 19) : '';
+            return `<div style="display:flex;align-items:center;gap:6px;padding:6px 10px;border-bottom:1px solid #f0f0f0;font-size:12px">
+                <span>${icon}</span>
+                <span style="color:#999;min-width:60px">${time}</span>
+                <span style="flex:1;overflow:hidden;text-overflow:ellipsis">${escHtml(e.file_name)}</span>
+                <span style="color:#888">${e.file_size > 0 ? formatSize(e.file_size) : ''}</span>
+            </div>`;
+        }).join('');
+    } catch(e) {
+        el.innerHTML = '<div style="padding:20px;text-align:center;color:#ff4d4f">❌ 加载失败</div>';
+    }
+}
+
+function switchEventTab(btn, type) {
+    document.querySelectorAll('.event-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    eventType = type;
+    loadEvents();
+}
+
+function formatSize(bytes) {
+    if (bytes < 1024) return bytes + 'B';
+    if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + 'KB';
+    return (bytes/1024/1024).toFixed(1) + 'MB';
+}
+
+// 加载监控状态和事件
+loadMonitorStatus();
+loadEvents();
+// 每 30 秒刷新状态和事件
+setInterval(() => {
+    loadMonitorStatus();
+    loadEvents();
+}, 30000);
 
 // 加载日志
 loadLogs();

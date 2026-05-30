@@ -12,6 +12,7 @@ from core.config import load_config, save_config, update_config
 from core.file_ops import FileOps
 from core.shortcuts import load_shortcuts, add_shortcut, delete_shortcut
 from core.logger import logger, get_log_lines, clear_logs as clear_log_files
+from core.file_monitor import get_monitor
 from autolearn.models import init_db as init_autolearn_db, get_active_patterns, dismiss_pattern, count_events_last_24h, get_db_size_mb
 from autolearn.collector import start_collectors
 from autolearn.analyzer import run_analysis, purge_old_data
@@ -234,6 +235,57 @@ def api_logs_clear():
     result = clear_log_files()
     return jsonify(result)
 
+@app.route("/api/monitor/status")
+def monitor_status():
+    """文件监控状态"""
+    m = get_monitor()
+    return jsonify(m.get_status())
+
+@app.route("/api/monitor/start", methods=["POST"])
+def monitor_start():
+    """启动文件监控"""
+    m = get_monitor()
+    ok = m.start()
+    return jsonify({"status": "ok" if ok else "already_running", "running": m.is_running})
+
+@app.route("/api/monitor/stop", methods=["POST"])
+def monitor_stop():
+    """停止文件监控"""
+    m = get_monitor()
+    m.stop()
+    return jsonify({"status": "ok", "running": False})
+
+@app.route("/api/monitor/events")
+def monitor_events():
+    """获取文件变化事件"""
+    count = request.args.get("count", 50, type=int)
+    event_type = request.args.get("type", "", type=str)
+    search = request.args.get("search", "", type=str)
+    count = min(count, 200)
+    m = get_monitor()
+    events = m.get_events(count=count, event_type=event_type, search=search)
+    return jsonify(events)
+
+@app.route("/api/monitor/dirs", methods=["POST"])
+def monitor_add_dir():
+    """添加监控目录"""
+    data = request.json or {}
+    path = data.get("path", "")
+    if not path:
+        return jsonify({"status": "error", "error": "path 不能为空"}), 400
+    m = get_monitor()
+    return jsonify(m.add_directory(path))
+
+@app.route("/api/monitor/dirs", methods=["DELETE"])
+def monitor_remove_dir():
+    """移除监控目录"""
+    data = request.json or {}
+    path = data.get("path", "")
+    if not path:
+        return jsonify({"status": "error", "error": "path 不能为空"}), 400
+    m = get_monitor()
+    return jsonify(m.remove_directory(path))
+
 @app.route("/settings")
 def settings():
     """配置页面"""
@@ -265,6 +317,11 @@ def main():
             _start_autolearn_scheduler()
         except Exception as e:
             logger.warning("自动学习采集器启动失败: %s", e)
+        # 启动文件监控
+        try:
+            get_monitor().start()
+        except Exception as e:
+            logger.warning("文件监控启动失败: %s", e)
     # 启动 Flask
     app.run(host="127.0.0.1", port=7788, debug=False)
 
