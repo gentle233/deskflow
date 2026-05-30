@@ -147,19 +147,40 @@ class Orchestrator:
         return self._run_workflow(context, reply)
 
     def _run_workflow(self, context: list, reply: str) -> str:
-        """执行工作流循环，支持 ask_user 暂停"""
+        """执行工作流循环，支持并行和 ask_user 暂停"""
         mode = self._parse_mode(reply)
         context.append({"role": "assistant", "content": reply})
 
         for step_idx in range(10):
-            # 检查 ask_user
-            if self._has_action(reply, "ask_user"):
+            # 解析所有步骤
+            steps = self._parse_all_steps(reply)
+            if not steps:
+                break
+
+            # 检查是否有 ask_user 步骤
+            ask_steps = [s for s in steps if s["action"] == "ask_user"]
+            if ask_steps:
+                # 先执行 ask_user 前面的所有 call_agent 步骤（可并行）
+                pre_steps = [s for s in steps if s["action"] == "call_agent"]
+                if pre_steps:
+                    results = self._batch_execute_agents(pre_steps)
+                    for r_text in results:
+                        context.append({"role": "user", "content": r_text})
+                    # 把结果喂给 LLM
+                    reply = self.llm.chat(context, stream=False)
+                    context.append({"role": "assistant", "content": reply})
+                    # 重新解析
+                    steps = self._parse_all_steps(reply)
+                    ask_steps = [s for s in steps if s["action"] == "ask_user"]
+
+                # 处理 ask_user
+                first_ask = ask_steps[0]
                 self._workflow_state = {
                     "context": context,
                     "step": step_idx,
                     "mode": mode,
                 }
-                desc = self._extract_description(reply) or "请确认是否继续？"
+                desc = first_ask.get("description", "请确认是否继续？")
                 self.history.append({"role": "assistant", "content": reply})
                 return (
                     f"{reply}\n\n"
@@ -168,28 +189,22 @@ class Orchestrator:
                     f'回复 "确认" 继续，或 "取消" 中止'
                 )
 
-            # 检查 agent 调用
-            agent_call = self._parse_agent_call(reply)
-            if not agent_call:
+            # 没有 ask_user → 执行所有 call_agent 步骤（并行）
+            call_steps = [s for s in steps if s["action"] == "call_agent"]
+            if not call_steps:
                 break
 
-            # 执行 SubAgent
-            agent_name = agent_call["agent"]
-            params = agent_call.get("params", {})
-            result = self.dispatcher.dispatch(agent_name, params, "")
-
-            # 结果喂回 LLM
-            result_text = (
-                f"[SubAgent 执行结果]\n"
-                f"{result.summary if result.success else result.error}"
-            )
-            context.append({"role": "user", "content": result_text})
+            results = self._batch_execute_agents(call_steps)
+            for r_text in results:
+                context.append({"role": "user", "content": r_text})
 
             # LLM 决定下一步
             reply = self.llm.chat(context, stream=False)
             context.append({"role": "assistant", "content": reply})
 
-            if not self._parse_agent_call(reply) and not self._has_action(reply, "ask_user"):
+            # 检查是否还有步骤
+            next_steps = self._parse_all_steps(reply)
+            if not next_steps:
                 break
 
         self.history.append({"role": "assistant", "content": reply})
@@ -290,6 +305,62 @@ class Orchestrator:
     def _extract_description(self, reply: str) -> str | None:
         m = re.search(r'\[description:\s*(.+?)\]', reply)
         return m.group(1).strip() if m else None
+
+    def _parse_all_steps(self, reply: str) -> list[dict]:
+        """从 LLM 回复中提取所有工作流步骤"""
+        steps = []
+        parts = reply.split("[step:")
+        for part in parts[1:]:
+            step_num = part.split("]")[0].strip() if "]" in part else ""
+            body = part[len(step_num) + 1:].strip() if step_num else part
+            if not step_num:
+                continue
+            action_m = __import__("re").search(r'\[action:\s*(\w+)\]', body)
+            agent_m = __import__("re").search(r'\[agent:\s*(.+?)\]', body)
+            desc_m = __import__("re").search(r'\[description:\s*(.+?)\]', body)
+            params = {}
+            params_m = __import__("re").search(r'\[params:\s*(\{.*?\})\]', body)
+            if params_m:
+                try:
+                    import json
+                    params = json.loads(params_m.group(1))
+                except json.JSONDecodeError:
+                    pass
+            steps.append({
+                "step": int(step_num) if step_num.isdigit() else 0,
+                "action": action_m.group(1) if action_m else None,
+                "agent": agent_m.group(1).strip() if agent_m else None,
+                "params": params,
+                "description": desc_m.group(1).strip() if desc_m else "",
+            })
+        return steps
+
+    def _batch_execute_agents(self, steps: list[dict]) -> list[str]:
+        """并行执行一批 Agent 调用"""
+        if len(steps) == 1:
+            s = steps[0]
+            result = self.dispatcher.dispatch(s["agent"], s.get("params", {}), "")
+            return [f'[{s["description"]}]\n{result.summary if result.success else result.error}']
+
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        results_text = []
+        with ThreadPoolExecutor(max_workers=min(len(steps), 5)) as executor:
+            future_map = {
+                executor.submit(
+                    self.dispatcher.dispatch, s["agent"], s.get("params", {}), ""
+                ): s
+                for s in steps
+            }
+            for future in as_completed(future_map):
+                s = future_map[future]
+                try:
+                    result = future.result()
+                    text = f'[{s["description"]}]\n{result.summary if result.success else result.error}'
+                except Exception as e:
+                    text = f'[{s["description"]}]\n❌ 执行失败: {e}'
+                results_text.append(text)
+        return results_text
+
 
     # =========================================================
     # 旧版兼容：Tool 执行
