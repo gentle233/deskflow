@@ -247,7 +247,7 @@ def main():
             start_collectors()
             _start_autolearn_scheduler()
         except Exception as e:
-            print(f"[autolearn] 采集器启动失败: {e}")
+            logger.warning("自动学习采集器启动失败: %s", e)
     # 启动 Flask
     app.run(host="127.0.0.1", port=7788, debug=False)
 
