@@ -199,8 +199,12 @@ class Orchestrator:
         return "\n".join(lines)
 
     def _build_workflow_list(self) -> str:
-        """动态生成可用工作模式列表（Phase 2 实现）"""
-        return "（暂无预设工作模式，由你自行编排）"
+        """动态生成可用工作模式列表"""
+        try:
+            from orchestrator.workflows import get_workflow_list_text
+            return get_workflow_list_text()
+        except ImportError:
+            return "（暂无预设工作模式，由你自行编排）"
 
     def _parse_mode(self, reply: str) -> str | None:
         """从 LLM 回复中提取 [mode: xxx]"""
