@@ -11,6 +11,9 @@ from core.llm_gateway import LLMGateway
 from core.config import load_config, save_config, update_config
 from core.file_ops import FileOps
 from core.shortcuts import load_shortcuts, add_shortcut, delete_shortcut
+from autolearn.models import init_db as init_autolearn_db, get_active_patterns, dismiss_pattern, count_events_last_24h, get_db_size_mb
+from autolearn.collector import start_collectors
+from autolearn.analyzer import run_analysis, purge_old_data
 from orchestrator.engine import Orchestrator
 from agents.file_manager import FileManagerAgent
 from agents.document import DocumentAgent
@@ -171,6 +174,50 @@ def remove_shortcut():
         return jsonify({"status": "error", "error": "trigger 不能为空"}), 400
     return jsonify(delete_shortcut(trigger))
 
+@app.route("/api/autolearn/suggestions")
+def autolearn_suggestions():
+    """获取学习建议"""
+    patterns = get_active_patterns(limit=3, min_confidence=0.5)
+    return jsonify([{
+        'id': p['id'],
+        'type': p['pattern_type'],
+        'key': p['pattern_key'],
+        'value': p['pattern_value'],
+        'title': _autolearn_title(p),
+        'confidence': p['confidence']
+    } for p in patterns])
+
+@app.route("/api/autolearn/dismiss/<int:pattern_id>", methods=["POST"])
+def autolearn_dismiss(pattern_id):
+    """忽略建议"""
+    dismiss_pattern(pattern_id)
+    return jsonify({"status": "ok"})
+
+@app.route("/api/autolearn/stats")
+def autolearn_stats():
+    """学习统计"""
+    return jsonify({
+        'events_today': count_events_last_24h(),
+        'active_patterns': len(get_active_patterns(limit=100, min_confidence=0)),
+        'storage_mb': get_db_size_mb()
+    })
+
+def _autolearn_title(pattern: dict) -> str:
+    """为学习模式生成友好标题"""
+    pt = pattern['pattern_type']
+    val = pattern['pattern_value'] or ''
+    if pt == 'frequent_folder':
+        return f'📂 快速打开: {os.path.basename(val) or val}'
+    elif pt == 'weekly_report':
+        return f'📝 写周报时间'
+    elif pt == 'common_phrase':
+        return f'💬 常用短语: "{val}"'
+    elif pt == 'repeated_action':
+        return f'🔄 重复操作: {val[:20]}'
+    elif pt == 'user_preference':
+        return f'💡 {val[:30]}'
+    return f'🔔 {val[:30]}'
+
 @app.route("/settings")
 def settings():
     """配置页面"""
@@ -191,11 +238,35 @@ def _init_orchestrator():
 
 def main():
     init_db()
+    init_autolearn_db()
     config = load_config()
     if not config.get("first_run"):
         _init_orchestrator()
+        # 启动自动学习采集器
+        try:
+            start_collectors()
+            _start_autolearn_scheduler()
+        except Exception as e:
+            print(f"[autolearn] 采集器启动失败: {e}")
     # 启动 Flask
     app.run(host="127.0.0.1", port=7788, debug=False)
+
+
+def _start_autolearn_scheduler():
+    """启动自动学习定时任务"""
+    try:
+        from apscheduler.schedulers.background import BackgroundScheduler
+        scheduler = BackgroundScheduler()
+        # 每小时分析一次
+        scheduler.add_job(run_analysis, 'interval', hours=1, id='autolearn_analysis')
+        # 每天凌晨清理一次过期数据
+        scheduler.add_job(purge_old_data, 'cron', hour=3, id='autolearn_purge')
+        scheduler.start()
+        print("[autolearn] 定时任务已启动（每小时分析 / 每天3点清理）")
+    except ImportError:
+        print("[autolearn] apscheduler 未安装，跳过定时分析")
+    except Exception as e:
+        print(f"[autolearn] 调度器启动失败: {e}")
 
 if __name__ == "__main__":
     main()
