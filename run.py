@@ -153,17 +153,14 @@ def main():
         width=1100,
         height=750,
         resizable=True,
-        icon=icon_path,
         easy_drag=True,
     )
 
-    # 启动（tray 托盘模式）
+    # 启动
     _log("✅ 窗口已创建，等待用户操作")
     _log("=" * 50)
     webview.start(
-        tray=True,
-        tray_icon=icon_path,
-        tray_text="DeskFlow",
+        icon=icon_path,
     )
 
 
