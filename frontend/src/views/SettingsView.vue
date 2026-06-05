@@ -6,6 +6,26 @@
     </div>
     <div class="settings-content">
 
+      <!-- 0. Server Connection -->
+      <div class="section">
+        <h3>🔗 服务器连接</h3>
+        <div class="card">
+          <div class="row">
+            <span class="label">服务器地址</span>
+            <input type="text" id="server-url" :value="serverUrl" @input="serverUrl = $event.target.value" placeholder="留空使用当前服务器" style="flex:1;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px">
+          </div>
+          <div class="row">
+            <span class="label">连接状态</span>
+            <span :class="['status-badge', connectionStatus === 'connected' ? 'status-ok' : connectionStatus === 'error' ? 'status-err' : 'status-wait']">{{ connectionStatusText }}</span>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+            <button @click="testConnection" style="padding:8px 20px;background:#52c41a;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer">测试连接</button>
+            <button @click="saveServerUrl" style="padding:8px 20px;background:#4a7cff;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer">保存地址</button>
+          </div>
+          <div id="server-msg" style="font-size:12px;color:#999;padding:8px 0">{{ serverMsg }}</div>
+        </div>
+      </div>
+
       <!-- 1. AI Provider -->
       <div class="section">
         <h3>AI 提供商</h3>
@@ -167,7 +187,7 @@
         <div class="card">
           <div class="row">
             <span class="label">API 状态</span>
-            <span class="status-badge" :class="connectionBadgeClass">{{ connectionStatusText }}</span>
+            <span class="status-badge" :class="apiConnectionBadgeClass">{{ apiConnectionStatusText }}</span>
           </div>
           <div class="check-result">{{ connectionResult }}</div>
         </div>
@@ -353,6 +373,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
+import { getServerUrl, setServerUrl } from '../config'
 
 const router = useRouter()
 
@@ -393,6 +414,40 @@ async function api(url, options = {}) {
 
 function goHome() {
   router.push('/')
+}
+
+// ─── 0. Server Connection ────────────────────────────────────
+const serverUrl = ref(getServerUrl())
+const connectionStatus = ref('checking')
+const connectionStatusText = ref('检查中...')
+const serverMsg = ref('')
+
+async function testConnection() {
+  connectionStatus.value = 'checking'
+  connectionStatusText.value = '检查中...'
+  serverMsg.value = '⏳ 正在连接...'
+  try {
+    const url = serverUrl.value || ''
+    const base = url ? url : ''
+    const r = await fetch(base ? base + '/api/config' : '/api/config')
+    if (r.ok) {
+      connectionStatus.value = 'connected'
+      connectionStatusText.value = '✅ 已连接'
+      serverMsg.value = '✅ 连接成功！'
+    } else {
+      throw new Error('HTTP ' + r.status)
+    }
+  } catch(e) {
+    connectionStatus.value = 'error'
+    connectionStatusText.value = '❌ 连接失败'
+    serverMsg.value = '❌ ' + (e.message || String(e))
+  }
+}
+
+function saveServerUrl() {
+  setServerUrl(serverUrl.value)
+  serverMsg.value = '✅ 服务器地址已保存'
+  setTimeout(() => testConnection(), 500)
 }
 
 // ─── 1. AI Provider ──────────────────────────────────────────
@@ -669,34 +724,34 @@ async function deleteShortcut(trigger) {
 }
 
 // ─── 6. Connection Check ─────────────────────────────────────
-const connectionStatus = ref('wait')
+const apiConnectionStatus = ref('wait')
 const connectionResult = ref('')
 
-const connectionBadgeClass = computed(() => ({
+const apiConnectionBadgeClass = computed(() => ({
   'status-badge': true,
-  'status-ok': connectionStatus.value === 'ok',
-  'status-err': connectionStatus.value === 'err',
-  'status-wait': connectionStatus.value === 'wait',
+  'status-ok': apiConnectionStatus.value === 'ok',
+  'status-err': apiConnectionStatus.value === 'err',
+  'status-wait': apiConnectionStatus.value === 'wait',
 }))
-const connectionStatusText = computed(() => {
-  if (connectionStatus.value === 'ok') return '✔ 正常'
-  if (connectionStatus.value === 'err') return '✘ 失败'
+const apiConnectionStatusText = computed(() => {
+  if (apiConnectionStatus.value === 'ok') return '✔ 正常'
+  if (apiConnectionStatus.value === 'err') return '✘ 失败'
   return '检查中...'
 })
 
 async function checkConnection() {
-  connectionStatus.value = 'wait'
+  apiConnectionStatus.value = 'wait'
   connectionResult.value = ''
   try {
     const data = await api('/api/provider/check')
     if (data.status === 'ok') {
-      connectionStatus.value = 'ok'
+      apiConnectionStatus.value = 'ok'
     } else {
-      connectionStatus.value = 'err'
+      apiConnectionStatus.value = 'err'
       connectionResult.value = data.message || '未知错误'
     }
   } catch (e) {
-    connectionStatus.value = 'err'
+    apiConnectionStatus.value = 'err'
     connectionResult.value = '连接失败: ' + e.message
   }
 }
@@ -1024,6 +1079,7 @@ onMounted(async () => {
     loadTasks(),
     loadLogs(),
     loadAutolearnStats(),
+    testConnection(),
   ])
 
   // Auto-refresh logs every 15s
@@ -1712,5 +1768,14 @@ onUnmounted(() => {
 
 .log-line-other {
   color: #6c7086;
+}
+
+@media (max-width: 600px) {
+  .content { padding: 12px; }
+  .card { padding: 12px; }
+  .row { flex-direction: column; gap: 4px; }
+  .row .label { font-size: 13px; }
+  input, select { font-size: 16px !important; }
+  button { min-height: 44px; }
 }
 </style>

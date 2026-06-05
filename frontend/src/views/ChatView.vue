@@ -125,6 +125,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { marked } from 'marked'
 import { useRouter } from 'vue-router'
+import { api } from '../config'
 
 marked.setOptions({ breaks: true, gfm: true })
 
@@ -258,7 +259,7 @@ async function send() {
   abortController = new AbortController()
 
   try {
-    const resp = await fetch('/api/chat/stream', {
+    const resp = await fetch(api('/api/chat/stream'), {
       method: 'POST',
       body: formData,
       signal: abortController.signal
@@ -448,7 +449,7 @@ function toggleLearnPanel() {
 
 async function loadSuggestions() {
   try {
-    const r = await fetch('/api/autolearn/suggestions')
+    const r = await fetch(api('/api/autolearn/suggestions'))
     const data = await r.json()
     suggestions.value = data
   } catch (e) {
@@ -458,7 +459,7 @@ async function loadSuggestions() {
 
 async function dismissSuggestion(id) {
   try {
-    await fetch('/api/autolearn/dismiss/' + id, { method: 'POST' })
+    await fetch(api('/api/autolearn/dismiss/' + id), { method: 'POST' })
     await loadSuggestions()
   } catch (e) {
     // ignore
@@ -476,7 +477,7 @@ function toggleMonitorPanel() {
 
 async function loadMonitorEvents() {
   try {
-    const r = await fetch('/api/monitor/events?count=5')
+    const r = await fetch(api('/api/monitor/events?count=5'))
     const data = await r.json()
     monitorEvents.value = data
   } catch (e) {
@@ -496,7 +497,7 @@ function eventIcon(eventType) {
 // ---- Shortcuts ----
 async function loadShortcuts() {
   try {
-    const r = await fetch('/api/shortcuts')
+    const r = await fetch(api('/api/shortcuts'))
     shortcutsCache.value = await r.json()
   } catch (e) {
     shortcutsCache.value = []
@@ -524,7 +525,7 @@ onMounted(() => {
   // Monitor status polling (every 60s)
   monitorInterval = setInterval(async () => {
     try {
-      const r = await fetch('/api/monitor/status')
+      const r = await fetch(api('/api/monitor/status'))
       const s = await r.json()
       if (s.event_count > lastEventCount && s.event_count > 0) {
         monitorDotVisible.value = true
@@ -1045,5 +1046,17 @@ function handleClickOutside(e) {
 
 .bubble :deep(strong) {
   font-weight: 600;
+}
+
+@media (max-width: 600px) {
+  .chat-container { max-width: 100%; border-radius: 0; }
+  .messages { padding: 10px; }
+  .bubble { max-width: 90%; font-size: 14px; padding: 10px 14px; }
+  .input-area { padding: 8px; }
+  .input-area textarea { font-size: 16px; padding: 10px; }
+  .header { padding: 10px 12px; }
+  .header .title { font-size: 16px; }
+  .header-actions .icon-btn { font-size: 20px; min-width: 44px; min-height: 44px; }
+  .send-btn, .stop-btn { min-width: 44px; min-height: 44px; }
 }
 </style>
