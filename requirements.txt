@@ -1,4 +1,7 @@
 flask>=3.0
+fastapi>=0.110
+uvicorn>=0.29
+python-multipart>=0.0.9
 PyWebView>=4.0
 pandas>=2.0
 openpyxl>=3.1
