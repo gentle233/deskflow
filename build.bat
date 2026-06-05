@@ -15,7 +15,7 @@ if %errorlevel% neq 0 (
 )
 
 :: Install dependencies
-echo [1/3] Installing dependencies...
+echo [1/4] Installing dependencies...
 pip install -r requirements.txt
 if %errorlevel% neq 0 (
     echo [ERROR] pip install failed.
@@ -23,8 +23,27 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
+:: Build Vue frontend
+echo [2/4] Building Vue frontend...
+cd frontend
+call npm install
+if %errorlevel% neq 0 (
+    echo [ERROR] npm install failed.
+    cd ..
+    pause
+    exit /b 1
+)
+call npm run build
+if %errorlevel% neq 0 (
+    echo [ERROR] Vue build failed.
+    cd ..
+    pause
+    exit /b 1
+)
+cd ..
+
 :: Install PyInstaller
-echo [2/3] Installing PyInstaller...
+echo [3/4] Installing PyInstaller...
 pip install pyinstaller
 if %errorlevel% neq 0 (
     echo [ERROR] PyInstaller install failed.
@@ -33,7 +52,7 @@ if %errorlevel% neq 0 (
 )
 
 :: Build
-echo [3/3] Building DeskFlow.exe...
+echo [4/4] Building DeskFlow.exe...
 pyinstaller --onedir ^
     --collect-all flask ^
     --collect-all jinja2 ^

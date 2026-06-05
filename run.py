@@ -53,11 +53,9 @@ BASE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, BASE)
 
 # ── 强制 PyInstaller 打包这些依赖（main.py 在后台线程 import，静态扫描可能漏） ──
-import flask  # noqa: F401
-import jinja2  # noqa: F401
-import werkzeug  # noqa: F401
-import markupsafe  # noqa: F401
-import click  # noqa: F401
+import fastapi  # noqa: F401
+import uvicorn  # noqa: F401
+import api.main  # noqa: F401
 import requests  # noqa: F401
 import pandas  # noqa: F401
 import watchdog  # noqa: F401
@@ -69,7 +67,7 @@ _window = None
 
 
 def _wait_for_flask(host="127.0.0.1", port=7788, timeout=15):
-    """等待 Flask 服务器就绪"""
+    """等待服务器就绪"""
     import urllib.request
     import urllib.error
     start = time.time()
@@ -78,23 +76,26 @@ def _wait_for_flask(host="127.0.0.1", port=7788, timeout=15):
             urllib.request.urlopen(f"http://{host}:{port}/", timeout=2)
             return True
         except urllib.error.URLError as e:
-            _log(f"  Flask 未就绪... ({e.reason})")
+            _log(f"  服务器未就绪... ({e.reason})")
             time.sleep(0.5)
         except Exception:
             time.sleep(0.5)
     return False
 
 
-def _start_flask():
-    """在后台线程中启动 Flask"""
+def _start_server():
+    """在后台线程中启动 Uvicorn"""
     try:
-        _log("  Flask 启动中...")
-        from main import app, init_deskflow
+        _log("  Uvicorn 启动中...")
+        from main import init_deskflow
         init_deskflow()
-        _log("  Flask 初始化完成，开始监听 7788 端口")
-        app.run(host="127.0.0.1", port=7788, debug=False, use_reloader=False)
+        from api.main import app as fastapi_app
+        import uvicorn
+        config = uvicorn.Config(fastapi_app, host="127.0.0.1", port=7788, log_level="info")
+        server = uvicorn.Server(config)
+        server.run()
     except Exception as e:
-        _log(f"❌ Flask 线程崩溃: {e}")
+        _log(f"❌ Uvicorn 线程崩溃: {e}")
         for line in traceback.format_exc().split("\n"):
             _log(f"  {line}")
 
@@ -111,15 +112,15 @@ def main():
     _init_logging()
 
     # ── 启动 Flask ──
-    _flask_thread = threading.Thread(target=_start_flask, daemon=True)
+    _flask_thread = threading.Thread(target=_start_server, daemon=True)
     _flask_thread.start()
 
-    # ── 等待 Flask 就绪 ──
-    _log("  等待 Flask 就绪...")
+    # ── 等待服务器就绪 ──
+    _log("  等待服务器就绪...")
     if not _wait_for_flask():
-        _log("❌ Flask 启动超时 (15s)，退出")
+        _log("❌ 服务器启动超时 (15s)，退出")
         sys.exit(1)
-    _log("✅ Flask 就绪")
+    _log("✅ 服务器就绪")
 
     # ── 打开 PyWebView 窗口 ──
     try:

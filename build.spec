@@ -13,6 +13,14 @@ for root, dirs, files in os.walk(join(BASE, 'ui')):
     for f in files:
         datas.append((join(root, f), dest))
 
+# 添加前端构建产物
+vue_dist = join(BASE, 'frontend', 'dist')
+if os.path.exists(vue_dist):
+    for root, dirs, files in os.walk(vue_dist):
+        dest = os.path.relpath(root, BASE)
+        for f in files:
+            datas.append((join(root, f), dest))
+
 a = Analysis(
     ['run.py'],
     pathex=[BASE],
@@ -41,6 +49,12 @@ a = Analysis(
         'apscheduler.schedulers.background',
         'sqlite3',
         'webview.platforms',
+        'fastapi', 'uvicorn', 'python_multipart', 'pydantic', 'starlette', 'httptools',
+        'api.main', 'api.routes.chat', 'api.routes.config_routes',
+        'api.routes.email_routes', 'api.routes.autolearn',
+        'api.routes.monitor', 'api.routes.tasks',
+        'api.routes.shortcuts', 'api.routes.logs',
+        'agents.mail',
     ],
     hookspath=[],
     hooksconfig={},
@@ -62,7 +76,8 @@ log("--- Collecting all submodules ---")
 for _pkg in ['flask', 'jinja2', 'werkzeug', 'markupsafe',
              'pandas', 'openpyxl', 'apscheduler',
              'watchdog', 'pywinauto', 'webview',
-             'requests', 'pypdf', 'python_docx']:
+             'requests', 'pypdf', 'python_docx',
+             'fastapi', 'uvicorn', 'starlette', 'pydantic']:
     try:
         _d, _b, _hi = collect_all(_pkg)
         # 只合并 hidden imports，datas/binaries 的格式与 TOC 不兼容
