@@ -28,7 +28,16 @@ class IntentRouter:
 5. web_search: 联网搜索
    - 用户说"查一下""搜一搜""最近的新闻""搜索"
 
-6. window_ops: Windows 窗口操作
+6. mail: 邮件处理
+   - mail_read: 读取收件箱邮件
+   - mail_search: 搜索邮件（按发件人/主题/内容）
+   - mail_summarize: 邮件摘要（未读/最近）
+   - mail_send: 发送邮件
+   - 用户说"看看邮件""查邮件""有什么新邮件""帮我发个邮件""找一下XX发的邮件"
+   - params: {"type": "mail_read|mail_search|mail_summarize|mail_send",
+              "keyword": "搜索关键词", "to": "收件人", "subject": "主题", "body": "正文", "count": 5}
+
+7. window_ops: Windows 窗口操作
    - 用户说"打开计算器""最小化所有窗口""帮我关闭记事本"
    - 用户说"截个屏""列出所有窗口""切换到浏览器"
    - 用户说"在记事本里输入一些文字"
@@ -79,6 +88,10 @@ class IntentRouter:
             (r"(找|搜索|查找|有没有).*(文件|文档|excel|word|pdf)", "file_search", "文件搜索"),
             (r"(打开|读|看看).*(文档|word|pdf|文件)", "doc_read", "文档读取"),
             (r"(写|生成|制作|起草).*(报告|文档|邮件|通知|申请|总结|方案|纪要|函)", "doc_write", "文档生成"),
+            (r"(看|查|读|收).*(邮件|邮箱|收件箱)", "mail_read", "邮件读取"),
+            (r"(搜|找|查).*(邮件|邮箱)", "mail_search", "邮件搜索"),
+            (r"(发|送|写).*(邮件|邮箱)", "mail_send", "邮件发送"),
+            (r"(摘要|总结|汇总).*(邮件|邮箱)", "mail_summarize", "邮件摘要"),
             (r"(汇总|分析|统计|整理|计算).*(excel|表格|报表|数据|销售|报销|支出|收入)", "excel_analyze", "表格分析"),
             (r"(查|搜).*(网|信息|资料|新闻|价格|天气|股票)", "web_search", "网络搜索"),
             (r"(调|写|发).*(邮件|mail)", "mail", "邮件处理"),

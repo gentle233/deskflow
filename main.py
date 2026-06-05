@@ -29,6 +29,7 @@ from agents.excel import ExcelAgent
 from agents.web_search import WebSearchAgent
 from agents.memory import MemoryAgent
 from agents.window_ops import WindowOpsAgent
+from agents.mail import MailAgent
 from memory.store import init_db
 
 # 应用根目录
@@ -227,6 +228,65 @@ def _autolearn_title(pattern: dict) -> str:
         return f'💡 {val[:30]}'
     return f'🔔 {val[:30]}'
 
+
+# ══════════════════════════════════════════════════════════════════════
+# 邮件配置 API
+# ══════════════════════════════════════════════════════════════════════
+
+from agents.mail import get_email_config, save_email_config, MAIL_PROVIDERS
+
+@app.route("/api/email/providers")
+def email_providers():
+    """获取邮箱提供商列表"""
+    return jsonify({k: {kk: vv for kk, vv in v.items() if kk != "password"}
+                    for k, v in MAIL_PROVIDERS.items()})
+
+@app.route("/api/email/config", methods=["GET"])
+def email_get_config():
+    """获取邮箱配置（隐藏密码）"""
+    cfg = get_email_config()
+    safe = dict(cfg)
+    if safe.get("password"):
+        safe["password"] = "••••••" if safe["password"] else ""
+    return jsonify(safe)
+
+@app.route("/api/email/config", methods=["POST"])
+def email_save_config():
+    """保存邮箱配置"""
+    data = request.json or {}
+    current = get_email_config()
+
+    # 密码处理：如果传了掩码值 "••••••"，保留旧密码
+    if data.get("password") == "••••••":
+        data["password"] = current.get("password", "")
+        data["password_encoded"] = current.get("password_encoded", False)
+
+    # 如果是新密码且未编码，进行 base64 编码
+    if data.get("password") and data["password"] != current.get("password", ""):
+        import base64
+        data["password"] = base64.b64encode(data["password"].encode()).decode()
+        data["password_encoded"] = True
+
+    save_email_config(data)
+    logger.info("邮箱配置已更新: %s", data.get("email", "(未设置)"))
+    return jsonify({"status": "ok"})
+
+@app.route("/api/email/test", methods=["POST"])
+def email_test():
+    """测试邮箱连接"""
+    from agents.mail import _connect_imap
+    cfg = get_email_config()
+    if not cfg.get("enabled") or not cfg.get("email") or not cfg.get("password"):
+        return jsonify({"status": "error", "message": "请先配置邮箱"})
+    try:
+        conn = _connect_imap(cfg)
+        conn.select("INBOX")
+        conn.close()
+        conn.logout()
+        return jsonify({"status": "ok", "message": "✅ 连接成功！"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"❌ 连接失败: {e}"})
+
 @app.route("/api/logs")
 def api_logs():
     """查看日志"""
@@ -396,6 +456,7 @@ def _init_orchestrator():
     orchestrator.dispatcher.register(WebSearchAgent())
     orchestrator.dispatcher.register(MemoryAgent())
     orchestrator.dispatcher.register(WindowOpsAgent())
+    orchestrator.dispatcher.register(MailAgent())
     # 注册定时任务回调
     def _task_callback(task, prompt):
         try:

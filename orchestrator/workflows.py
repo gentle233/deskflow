@@ -43,6 +43,14 @@ WORKFLOWS: dict[str, Workflow] = {
             {"action": "ask_user", "description": "展示搜索结果，询问是否需要进一步搜索或总结"},
         ]
     },
+    "email_operation": {
+        "name": "邮件处理",
+        "trigger": "用户需要读取、搜索、发送或摘要邮件",
+        "steps": [
+            {"action": "call_agent", "agent": "mail", "description": "执行邮件操作（读/搜/发/摘要）"},
+            {"action": "ask_user", "description": "展示邮件结果，询问是否需要更多操作"},
+        ]
+    },
     "file_operation": {
         "name": "文件操作",
         "trigger": "用户要查找、整理、移动、删除文件或目录",

@@ -15,6 +15,18 @@ DEFAULT_CONFIG = {
     "first_run": True,
     "search_provider": "ddgs",
     "bing_api_key": "",
+    "email": {
+        "enabled": False,
+        "provider": "QQ邮箱",
+        "imap_server": "imap.qq.com",
+        "imap_port": 993,
+        "smtp_server": "smtp.qq.com",
+        "smtp_port": 465,
+        "use_ssl": True,
+        "email": "",
+        "password": "",
+        "password_encoded": False,
+    },
 }
 
 

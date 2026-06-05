@@ -155,6 +155,54 @@
             </div>
 
             <div class="section">
+                <h3>📧 邮件设置</h3>
+                <div class="card" id="email-card">
+                    <div class="row">
+                        <span class="label">邮箱提供商</span>
+                        <select id="email-provider" onchange="onEmailProviderChange()" style="flex:1;padding:6px 10px;border:1px solid #ddd;border-radius:6px;background:#fff;font-size:13px">
+                        </select>
+                    </div>
+                    <div class="row">
+                        <span class="label">IMAP 服务器</span>
+                        <input type="text" id="email-imap-server" placeholder="imap.qq.com" style="flex:1;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px">
+                    </div>
+                    <div class="row">
+                        <span class="label">IMAP 端口</span>
+                        <input type="number" id="email-imap-port" value="993" style="width:80px;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px">
+                    </div>
+                    <div class="row">
+                        <span class="label">SMTP 服务器</span>
+                        <input type="text" id="email-smtp-server" placeholder="smtp.qq.com" style="flex:1;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px">
+                    </div>
+                    <div class="row">
+                        <span class="label">SMTP 端口</span>
+                        <input type="number" id="email-smtp-port" value="465" style="width:80px;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px">
+                    </div>
+                    <div class="row">
+                        <span class="label">邮箱地址</span>
+                        <input type="email" id="email-addr" placeholder="your@qq.com" style="flex:1;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px">
+                    </div>
+                    <div class="row">
+                        <span class="label">授权码/密码</span>
+                        <input type="password" id="email-password" placeholder="QQ邮箱需使用授权码" style="flex:1;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px">
+                    </div>
+                    <div class="row">
+                        <span class="label">启用</span>
+                        <label><input type="checkbox" id="email-enabled"> 启用邮件功能</label>
+                    </div>
+                    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+                        <button onclick="saveEmailConfig()" style="flex:1;padding:10px;background:#4a7cff;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer">保存配置</button>
+                        <button onclick="testEmailConfig()" style="flex:0;padding:10px 20px;background:#52c41a;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer">测试连接</button>
+                    </div>
+                    <div id="email-msg" style="font-size:12px;color:#999;padding:8px 0"></div>
+                    <div style="margin-top:8px;padding:8px;background:#fffbe6;border-radius:6px;border:1px solid #ffe58f;font-size:12px;color:#8c6d00">
+                        💡 QQ邮箱需开启 IMAP/SMTP 服务并获取<strong>授权码</strong>（不是登录密码）。
+                        可在 QQ邮箱 → 设置 → 账户 → POP3/IMAP/SMTP 服务中获取。
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
                 <h3>快捷指令</h3>
                 <div class="card">
                     <div id="shortcut-list"></div>
@@ -188,7 +236,7 @@
                     <div class="row"><span class="label">联网搜索</span><span class="value">⚠ 服务器可能受限</span></div>
                     <div class="row"><span class="label">用户习惯学习</span><span class="value">✔ 已实现</span></div>
                     <div class="row"><span class="label">文件监控</span><span class="value">✔ 已实现</span></div>
-                    <div class="row"><span class="label">邮件处理</span><span class="value">❌ 未实现</span></div>
+                    <div class="row"><span class="label">邮件处理</span><span class="value" id="email-status">✔ 已实现（需配置）</span></div>
                     <div class="row"><span class="label">自动化任务</span><span class="value">✔ 已实现</span></div>
                     <div class="row"><span class="label">窗口操作</span><span class="value" id="window-ops-status">⚠ 仅 Windows</span></div>
                     <div class="row">
@@ -831,6 +879,139 @@ fetch('/api/autolearn/stats').then(r=>r.json()).then(d=>{
     const el = document.getElementById('autolearn-stats');
     if (el) el.textContent = `📊 今日${d.events_today}条事件 · ${d.active_patterns}条模式 · ${d.storage_mb}MB`;
 }).catch(()=>{});
+
+// ══════════════════════════════════════════════════════════════════
+// 邮件设置
+// ══════════════════════════════════════════════════════════════════
+
+// 邮箱提供商数据库
+const MAIL_PROVIDERS = {};
+
+async function loadEmailProviders() {
+    try {
+        const r = await fetch('/api/email/providers');
+        const providers = await r.json();
+        const sel = document.getElementById('email-provider');
+        if (!sel) return;
+        Object.assign(MAIL_PROVIDERS, providers);
+        sel.innerHTML = Object.keys(providers).map(k =>
+            `<option value="${k}">${k}</option>`
+        ).join('');
+        // 加载已有配置
+        loadEmailConfig();
+    } catch(e) {
+        console.error('加载邮箱提供商失败', e);
+    }
+}
+
+function onEmailProviderChange() {
+    const sel = document.getElementById('email-provider');
+    const provider = MAIL_PROVIDERS[sel.value];
+    if (!provider) return;
+    document.getElementById('email-imap-server').value = provider.imap_server;
+    document.getElementById('email-imap-port').value = provider.imap_port;
+    document.getElementById('email-smtp-server').value = provider.smtp_server;
+    document.getElementById('email-smtp-port').value = provider.smtp_port;
+}
+
+async function loadEmailConfig() {
+    try {
+        const r = await fetch('/api/email/config');
+        const cfg = await r.json();
+        const sel = document.getElementById('email-provider');
+        // 设置提供商
+        if (cfg.provider && sel) {
+            for (let i = 0; i < sel.options.length; i++) {
+                if (sel.options[i].value === cfg.provider) {
+                    sel.selectedIndex = i;
+                    break;
+                }
+            }
+        }
+        onEmailProviderChange();
+        document.getElementById('email-addr').value = cfg.email || '';
+        document.getElementById('email-password').value = cfg.password || '';
+        document.getElementById('email-enabled').checked = cfg.enabled || false;
+        // 更新状态显示
+        const statusEl = document.getElementById('email-status');
+        if (statusEl) {
+            if (cfg.enabled && cfg.email) {
+                statusEl.textContent = `✔ ${cfg.email}`;
+                statusEl.style.color = '#52c41a';
+            } else {
+                statusEl.textContent = '⚠ 待配置';
+                statusEl.style.color = '#faad14';
+            }
+        }
+    } catch(e) {
+        console.error('加载邮箱配置失败', e);
+    }
+}
+
+async function saveEmailConfig() {
+    const msgEl = document.getElementById('email-msg');
+    if (!msgEl) return;
+    msgEl.textContent = '⏳ 保存中...';
+    msgEl.style.color = '#999';
+
+    const data = {
+        provider: document.getElementById('email-provider').value,
+        imap_server: document.getElementById('email-imap-server').value,
+        imap_port: parseInt(document.getElementById('email-imap-port').value) || 993,
+        smtp_server: document.getElementById('email-smtp-server').value,
+        smtp_port: parseInt(document.getElementById('email-smtp-port').value) || 465,
+        email: document.getElementById('email-addr').value,
+        password: document.getElementById('email-password').value,
+        enabled: document.getElementById('email-enabled').checked,
+    };
+
+    try {
+        const r = await fetch('/api/email/config', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+        const result = await r.json();
+        if (result.status === 'ok') {
+            msgEl.innerHTML = '✅ 配置已保存';
+            msgEl.style.color = '#52c41a';
+            loadEmailConfig(); // 刷新状态
+        } else {
+            msgEl.innerHTML = '❌ ' + (result.error || '保存失败');
+            msgEl.style.color = '#ff4d4f';
+        }
+    } catch(e) {
+        msgEl.innerHTML = '❌ ' + e.message;
+        msgEl.style.color = '#ff4d4f';
+    }
+}
+
+async function testEmailConfig() {
+    const msgEl = document.getElementById('email-msg');
+    if (!msgEl) return;
+    msgEl.innerHTML = '⏳ 正在测试连接...';
+    msgEl.style.color = '#999';
+
+    try {
+        const r = await fetch('/api/email/test', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'}
+        });
+        const result = await r.json();
+        if (result.status === 'ok') {
+            msgEl.innerHTML = '✅ ' + result.message;
+            msgEl.style.color = '#52c41a';
+        } else {
+            msgEl.innerHTML = '❌ ' + result.message;
+            msgEl.style.color = '#ff4d4f';
+        }
+    } catch(e) {
+        msgEl.innerHTML = '❌ ' + e.message;
+        msgEl.style.color = '#ff4d4f';
+    }
+}
+
+loadEmailProviders();
 </script>
 
 </body>
