@@ -1,0 +1,12 @@
+# Android build output
+build/
+app/build/
+
+# Signing key (keep this in repo for dev builds)
+# debug.keystore intentionally tracked
+
+# IDE files
+.idea/
+*.iml
+.gradle/
+local.properties
