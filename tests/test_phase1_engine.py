@@ -1,7 +1,7 @@
 
 """Phase 1 测试：主 Agent 提示词 + 红线机制 + 工作流解析"""
-import sys
-sys.path.insert(0, "/home/ubuntu/deskflow")
+import sys, os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from orchestrator.engine import Orchestrator
 
@@ -25,6 +25,7 @@ class TestOrchestratorCore:
         self.orch.llm = self.llm
         self.orch.history = []
         self.orch.dispatcher = None  # 不测调度
+        self.orch._workflow_state = None
     
     def test_master_prompt_exists(self):
         """MASTER_PROMPT 应包含必要元素"""
@@ -52,32 +53,39 @@ class TestOrchestratorCore:
         assert mode is None
         print("  ✅ 无 mode 时返回 None")
 
-    def test_parse_agent_call_found(self):
-        """应能提取 agent 名称和 params"""
+    def test_parse_all_steps_multi(self):
+        """应能提取多个步骤，含 agent 和 params"""
         reply = """[mode: 文件搜索]
 [step: 1]
 [action: call_agent]
 [agent: file_manager]
 [params: {"keyword": "报销单"}]
-[description: 搜索报销文件]"""
-        call = self.orch._parse_agent_call(reply)
-        assert call is not None
-        assert call["agent"] == "file_manager"
-        assert call["params"]["keyword"] == "报销单"
-        print(f"  ✅ _parse_agent_call() 返回: {call}")
+[description: 搜索报销文件]
 
-    def test_parse_agent_call_not_found(self):
-        """无 call_agent 时应返回 None"""
+[step: 2]
+[action: ask_user]
+[description: 确认是否保存]"""
+        steps = self.orch._parse_all_steps(reply)
+        assert len(steps) == 2
+        assert steps[0]["action"] == "call_agent"
+        assert steps[0]["agent"] == "file_manager"
+        assert steps[0]["params"]["keyword"] == "报销单"
+        assert steps[1]["action"] == "ask_user"
+        print(f"  ✅ _parse_all_steps() 返回 {len(steps)} 步骤")
+
+    def test_parse_all_steps_empty(self):
+        """无 step 标记时应返回空列表"""
         reply = "直接回复，不需要 agent"
-        call = self.orch._parse_agent_call(reply)
-        assert call is None
-        print("  ✅ 无 agent 调用时返回 None")
+        steps = self.orch._parse_all_steps(reply)
+        assert steps == []
+        print("  ✅ 无 step 时返回空列表")
 
     def test_build_master_context_structure(self):
         """_build_master_context 应返回正确结构的 messages"""
         self.orch.history = [
             {"role": "user", "content": "hi"},
-            {"role": "assistant", "content": "hello"}
+            {"role": "assistant", "content": "hello"},
+            {"role": "user", "content": "帮我找文件"},
         ]
         ctx = self.orch._build_master_context("帮我找文件")
         assert isinstance(ctx, list)
@@ -121,14 +129,13 @@ class TestOrchestratorCore:
 
 if __name__ == "__main__":
     t = TestOrchestratorCore()
-    t.setup_method()
-    
+
     tests = [
         ("MASTER_PROMPT 存在性", t.test_master_prompt_exists),
         ("_parse_mode 有值", t.test_parse_mode_found),
         ("_parse_mode 无值", t.test_parse_mode_not_found),
-        ("_parse_agent_call 有值", t.test_parse_agent_call_found),
-        ("_parse_agent_call 无值", t.test_parse_agent_call_not_found),
+        ("_parse_all_steps 多步骤", t.test_parse_all_steps_multi),
+        ("_parse_all_steps 空列表", t.test_parse_all_steps_empty),
         ("_build_master_context 结构", t.test_build_master_context_structure),
         ("_build_agent_list 空列表", t.test_build_agent_list_empty),
         ("直接回复路径", t.test_direct_reply_path),
@@ -139,6 +146,7 @@ if __name__ == "__main__":
     failed = 0
     for name, test_fn in tests:
         try:
+            t.setup_method()
             test_fn()
             passed += 1
         except Exception as e:
